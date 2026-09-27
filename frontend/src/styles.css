@@ -19,6 +19,7 @@ body {
   min-width: 320px;
   min-height: 100vh;
   overflow-x: hidden;
+  background: #070b12;
 }
 
 html,
@@ -26,6 +27,10 @@ html,
   width: 100%;
   max-width: 100%;
   overflow-x: hidden;
+}
+
+html {
+  scroll-behavior: smooth;
 }
 
 button,
@@ -52,6 +57,9 @@ a {
   grid-template-columns: 292px minmax(0, 1fr);
   min-height: 100vh;
   background:
+    radial-gradient(circle at 18% 12%, rgba(77, 163, 255, 0.16), transparent 30%),
+    radial-gradient(circle at 82% 3%, rgba(61, 220, 151, 0.14), transparent 28%),
+    radial-gradient(circle at 70% 70%, rgba(179, 140, 255, 0.08), transparent 34%),
     linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px),
     linear-gradient(180deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px),
     #0b0f14;
@@ -59,13 +67,17 @@ a {
 }
 
 .sidebar {
+  position: sticky;
+  top: 0;
   display: flex;
   flex-direction: column;
   gap: 18px;
   min-width: 0;
+  height: 100vh;
   padding: 24px 18px;
   border-right: 1px solid #242b33;
-  background: #10151b;
+  background: linear-gradient(180deg, rgba(16, 21, 27, 0.96), rgba(9, 13, 19, 0.98));
+  backdrop-filter: blur(18px);
 }
 
 .brand {
@@ -120,6 +132,31 @@ a {
   border: 1px solid #2b3540;
   border-radius: 8px;
   background: #151b22;
+}
+
+.sidebar-nav {
+  display: grid;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid #202a36;
+  border-radius: 14px;
+  background: rgba(10, 15, 22, 0.58);
+}
+
+.sidebar-nav a {
+  display: flex;
+  align-items: center;
+  min-height: 36px;
+  border-radius: 10px;
+  color: #b9c8d8;
+  padding: 0 11px;
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.sidebar-nav a:hover {
+  background: #172231;
+  color: #ffffff;
 }
 
 .environment-card strong {
@@ -226,7 +263,7 @@ a {
 .main-panel {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 20px;
   min-width: 0;
   padding: 24px;
 }
@@ -279,11 +316,12 @@ a {
 }
 
 .header-actions a {
-  min-width: 132px;
+  min-width: 122px;
   padding: 0 12px;
   border: 1px solid #303b48;
-  background: #151b22;
+  background: rgba(21, 27, 34, 0.86);
   color: #f4f7fb;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.16);
 }
 
 .header-actions a:hover {
@@ -377,6 +415,175 @@ a {
   color: #ffc36e;
 }
 
+.hero-console {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 220px 280px;
+  gap: 18px;
+  overflow: hidden;
+  min-width: 0;
+  border: 1px solid rgba(77, 163, 255, 0.34);
+  border-radius: 24px;
+  background:
+    linear-gradient(135deg, rgba(20, 31, 47, 0.92), rgba(11, 15, 22, 0.94)),
+    radial-gradient(circle at 20% 20%, rgba(77, 163, 255, 0.3), transparent 38%);
+  box-shadow: 0 26px 70px rgba(0, 0, 0, 0.32);
+  padding: 22px;
+}
+
+.hero-console::before {
+  position: absolute;
+  inset: -40% 45% auto auto;
+  width: 420px;
+  height: 420px;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(61, 220, 151, 0.24), transparent 62%);
+  content: "";
+  pointer-events: none;
+}
+
+.hero-console.excellent {
+  border-color: rgba(61, 220, 151, 0.38);
+}
+
+.hero-console.steady {
+  border-color: rgba(241, 199, 91, 0.38);
+}
+
+.hero-console.attention {
+  border-color: rgba(255, 107, 122, 0.42);
+}
+
+.hero-copy,
+.hero-score-card,
+.hero-mini-grid {
+  position: relative;
+  z-index: 1;
+}
+
+.hero-copy h2 {
+  max-width: 780px;
+  margin: 0;
+  color: #ffffff;
+  font-size: clamp(30px, 5vw, 56px);
+  line-height: 0.98;
+  letter-spacing: -0.04em;
+}
+
+.hero-copy p {
+  max-width: 760px;
+  margin: 16px 0 0;
+  color: #b9c8d8;
+  font-size: 16px;
+  line-height: 1.7;
+}
+
+.hero-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.hero-badges span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  border: 1px solid rgba(121, 189, 255, 0.28);
+  border-radius: 999px;
+  background: rgba(9, 14, 22, 0.72);
+  color: #dcecff;
+  padding: 0 11px;
+  font-size: 12px;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.hero-score-card,
+.mini-stat {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(7, 11, 18, 0.54);
+  backdrop-filter: blur(14px);
+}
+
+.hero-score-card {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 10px;
+  min-height: 230px;
+  border-radius: 20px;
+  padding: 18px;
+  text-align: center;
+}
+
+.hero-score-card strong {
+  color: #ffffff;
+}
+
+.hero-score-card small {
+  color: #9aa4b2;
+}
+
+.score-ring {
+  display: grid;
+  place-items: center;
+  width: 124px;
+  height: 124px;
+  border-radius: 999px;
+  box-shadow: 0 0 32px rgba(61, 220, 151, 0.16);
+}
+
+.score-ring span {
+  display: grid;
+  place-items: center;
+  width: 92px;
+  height: 92px;
+  border: 1px solid #26313d;
+  border-radius: inherit;
+  background: #0a1017;
+  color: #ffffff;
+  font-size: 26px;
+  font-weight: 950;
+}
+
+.hero-mini-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.mini-stat {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 108px;
+  border-radius: 18px;
+  padding: 15px;
+}
+
+.mini-stat strong {
+  color: #ffffff;
+  font-size: 30px;
+  line-height: 1;
+}
+
+.mini-stat span {
+  margin-top: 8px;
+  color: #9aa4b2;
+  font-size: 12px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+#overview,
+#deploy,
+#workloads,
+#observability,
+#logs {
+  scroll-margin-top: 22px;
+}
+
 .pipeline-strip {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -436,10 +643,11 @@ a {
 
 .summary-card,
 .panel,
-.metric-card {
+.metric-card,
+.stack-panel {
   border: 1px solid #2b3540;
-  border-radius: 8px;
-  background: #121820;
+  border-radius: 18px;
+  background: rgba(18, 24, 32, 0.88);
   box-shadow: 0 18px 36px rgba(0, 0, 0, 0.16);
 }
 
@@ -487,7 +695,7 @@ a {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   grid-template-areas:
-    "service service deploy deploy"
+    "service service deploy flow"
     "cpu memory requests errors"
     "fleet fleet logs logs"
     "fleet fleet audit readiness";
@@ -501,6 +709,10 @@ a {
 
 .deploy-panel {
   grid-area: deploy;
+}
+
+.flow-panel {
+  grid-area: flow;
 }
 
 .cpu-card {
@@ -536,9 +748,84 @@ a {
 }
 
 .panel,
-.metric-card {
+.metric-card,
+.stack-panel {
   min-width: 0;
   padding: 18px;
+}
+
+.stack-panel {
+  padding: 20px;
+}
+
+.stack-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.stack-card {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  gap: 12px;
+  min-height: 128px;
+  border: 1px solid #2d3743;
+  border-radius: 16px;
+  background: #0c121a;
+  padding: 14px;
+}
+
+.stack-card.ok {
+  border-color: rgba(61, 220, 151, 0.28);
+}
+
+.stack-card.warn {
+  border-color: rgba(241, 199, 91, 0.34);
+}
+
+.stack-card.blue {
+  border-color: rgba(77, 163, 255, 0.28);
+}
+
+.stack-icon {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 13px;
+  background: #182231;
+  color: #79bdff;
+}
+
+.stack-card.ok .stack-icon {
+  color: #3ddc97;
+}
+
+.stack-card.warn .stack-icon {
+  color: #f1c75b;
+}
+
+.stack-card span {
+  color: #9aa4b2;
+  font-size: 12px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.stack-card strong {
+  display: block;
+  margin-top: 5px;
+  color: #ffffff;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stack-card p {
+  margin: 8px 0 0;
+  color: #aeb9c8;
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .panel-heading {
@@ -686,6 +973,51 @@ a {
 
 .metric-card {
   min-height: 250px;
+}
+
+.flow-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.flow-step {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  border: 1px solid #2d3743;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #0c121a, #111a25);
+  padding: 12px;
+}
+
+.flow-index {
+  display: grid;
+  place-items: center;
+  gap: 3px;
+  width: 48px;
+  min-height: 58px;
+  border-radius: 13px;
+  background: #172231;
+  color: #79bdff;
+}
+
+.flow-index span {
+  color: #f1c75b;
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.flow-step strong {
+  color: #ffffff;
+}
+
+.flow-step p {
+  margin: 6px 0 0;
+  color: #aeb9c8;
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .metric-heading {
@@ -917,8 +1249,26 @@ td {
   }
 
   .sidebar {
+    position: relative;
+    height: auto;
     border-right: 0;
     border-bottom: 1px solid #242b33;
+  }
+
+  .sidebar-nav {
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  }
+
+  .hero-console {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .hero-score-card {
+    min-height: auto;
+  }
+
+  .stack-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .service-list {
@@ -930,7 +1280,7 @@ td {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     grid-template-areas:
       "service service"
-      "deploy readiness"
+      "deploy flow"
       "cpu memory"
       "requests errors"
       "fleet fleet"
@@ -950,7 +1300,8 @@ td {
 
   .pipeline-strip,
   .status-grid,
-  .service-facts {
+  .service-facts,
+  .hero-mini-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -983,7 +1334,9 @@ td {
   .status-grid,
   .service-facts,
   .dashboard-grid,
-  .deploy-number-row {
+  .deploy-number-row,
+  .stack-grid,
+  .hero-mini-grid {
     grid-template-columns: 1fr;
   }
 
@@ -991,6 +1344,7 @@ td {
     grid-template-areas:
       "service"
       "deploy"
+      "flow"
       "cpu"
       "memory"
       "requests"

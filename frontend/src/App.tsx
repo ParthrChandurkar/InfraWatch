@@ -71,6 +71,12 @@ const EMPTY_METRICS: ServiceMetrics = {
 
 const EMPTY_LOGS: LogsResponse = { service: "", lines: [], source: "empty" };
 const REPOSITORY_URL = "https://github.com/ParthrChandurkar/InfraWatch";
+const LOCAL_TOOLS = [
+  { label: "Grafana", href: "http://localhost:3001", icon: <BarChart3 size={16} /> },
+  { label: "Prometheus", href: "http://localhost:9090", icon: <Activity size={16} /> },
+  { label: "Alloy", href: "http://localhost:12345", icon: <Gauge size={16} /> },
+  { label: "API Docs", href: "http://localhost:8000/docs", icon: <Terminal size={16} /> },
+];
 
 function App() {
   const isLocalApi = apiMode === "local";
@@ -297,12 +303,82 @@ function App() {
     };
   }, [chartData, summary.Deploying, summary.Failed, summary.Pending]);
 
+  const healthTone = telemetry.healthScore >= 90 ? "excellent" : telemetry.healthScore >= 70 ? "steady" : "attention";
+  const activeRolloutCount = summary.Pending + summary.Deploying;
+  const signalCount = [
+    summary.Failed === 0,
+    activeRolloutCount === 0,
+    telemetry.errors < 0.2,
+    Boolean(selectedDeployment),
+  ].filter(Boolean).length;
+
   const pipelineSteps = [
     { icon: <GitBranch size={17} />, label: "GitHub", value: "main synced", state: "ready" },
     { icon: <Rocket size={17} />, label: "Delivery", value: "local validation", state: "ready" },
     { icon: <Layers size={17} />, label: "Deployments", value: isBrowserFallback ? "Manifest simulation" : "Docker images", state: "ready" },
     { icon: <Server size={17} />, label: "Runtime", value: isBrowserFallback ? "Browser sandbox" : isLocalApi ? "Local full stack" : "Configured API", state: "live" },
     { icon: <Gauge size={17} />, label: "Telemetry", value: telemetryMode, state: "live" },
+  ];
+
+  const platformSignals = [
+    {
+      icon: <Server size={18} />,
+      label: "Local Kubernetes",
+      value: isBrowserFallback ? "Simulated" : "Connected",
+      detail: isBrowserFallback ? "Safe browser sandbox" : "FastAPI can talk to the local control plane",
+      tone: isBrowserFallback ? "warn" : "ok",
+    },
+    {
+      icon: <Activity size={18} />,
+      label: "Prometheus",
+      value: isBrowserFallback ? "Mock metrics" : telemetryMode,
+      detail: "CPU, memory, request rate, and error-rate charts",
+      tone: "ok",
+    },
+    {
+      icon: <Terminal size={18} />,
+      label: "Alloy → Loki",
+      value: isBrowserFallback ? "Mock logs" : sourceLabel(logs.source),
+      detail: "Grafana Alloy forwards app logs into Loki",
+      tone: logs.source === "empty" && !isBrowserFallback ? "warn" : "ok",
+    },
+    {
+      icon: <BarChart3 size={18} />,
+      label: "Grafana",
+      value: "Deep dive",
+      detail: "Use Grafana for detailed observability views",
+      tone: "blue",
+    },
+    {
+      icon: <ShieldCheck size={18} />,
+      label: "Audit trail",
+      value: `${auditLogs.length} events`,
+      detail: "Deployment, rollback, and delete actions are tracked",
+      tone: auditLogs.length ? "ok" : "blue",
+    },
+  ];
+
+  const flowSteps = [
+    {
+      icon: <Rocket size={18} />,
+      title: "Add app",
+      body: "Enter image, port, replicas, and a service name.",
+    },
+    {
+      icon: <Layers size={18} />,
+      title: "Deploy locally",
+      body: "InfraWatch creates Kubernetes Deployment and Service manifests.",
+    },
+    {
+      icon: <Activity size={18} />,
+      title: "Observe",
+      body: "Prometheus handles metrics; Alloy forwards logs into Loki.",
+    },
+    {
+      icon: <RotateCcw size={18} />,
+      title: "Recover",
+      body: "Use audit history, rollback, and delete actions during testing.",
+    },
   ];
 
   const selectedStatus = selectedDeployment?.status ?? "Pending";
@@ -325,6 +401,14 @@ function App() {
           </div>
           <span className="pulse-dot" />
         </div>
+
+        <nav className="sidebar-nav" aria-label="Dashboard sections">
+          <a href="#overview">Overview</a>
+          <a href="#deploy">Deploy</a>
+          <a href="#workloads">Workloads</a>
+          <a href="#observability">Observability</a>
+          <a href="#logs">Logs</a>
+        </nav>
 
         <button className="refresh-button" type="button" onClick={handleRefresh} title="Refresh dashboard">
           <RefreshCw size={16} />
@@ -368,8 +452,8 @@ function App() {
         <header className="command-header">
           <div>
             <span className="eyebrow">Local Kubernetes Console</span>
-            <h1>InfraWatch Local Command Center</h1>
-            <p>Deploy lightweight services locally, check rollout health, and inspect logs and metrics in one control plane.</p>
+            <h1>CloudWatch-style visibility for local apps.</h1>
+            <p>Deploy lightweight services to local Kubernetes, watch rollout health, inspect metrics, stream logs, and keep audit history in one polished control plane.</p>
           </div>
           <div className="header-actions" aria-label="External operations tools">
             {!isLocalApi ? (
@@ -392,21 +476,13 @@ function App() {
               </>
             ) : (
               <>
-                <a href="http://localhost:3001" target="_blank" rel="noreferrer">
-                  <BarChart3 size={16} />
-                  Grafana
-                  <ExternalLink size={14} />
-                </a>
-                <a href="http://localhost:9090" target="_blank" rel="noreferrer">
-                  <Activity size={16} />
-                  Prometheus
-                  <ExternalLink size={14} />
-                </a>
-                <a href="http://localhost:8000/docs" target="_blank" rel="noreferrer">
-                  <Terminal size={16} />
-                  API Docs
-                  <ExternalLink size={14} />
-                </a>
+                {LOCAL_TOOLS.map((tool) => (
+                  <a href={tool.href} target="_blank" rel="noreferrer" key={tool.label}>
+                    {tool.icon}
+                    {tool.label}
+                    <ExternalLink size={14} />
+                  </a>
+                ))}
               </>
             )}
           </div>
@@ -415,6 +491,40 @@ function App() {
         {isDemoMode && <DemoModeBanner />}
 
         {error && <div className="error-banner">{error}</div>}
+
+        <section className={`hero-console ${healthTone}`} id="overview" aria-label="InfraWatch overview">
+          <div className="hero-copy">
+            <span className="section-kicker">Mission Control</span>
+            <h2>{selectedDeployment ? `${selectedDeployment.name} is under watch` : "Start with a lightweight container image"}</h2>
+            <p>
+              InfraWatch turns your local Kubernetes lab into a clean deployment and observability workspace for
+              testing apps before they move anywhere near cloud infrastructure.
+            </p>
+            <div className="hero-badges" aria-label="Platform capabilities">
+              <span>☸ Local Kubernetes</span>
+              <span>📈 Prometheus metrics</span>
+              <span>📜 Alloy + Loki logs</span>
+              <span>🧾 Audit trail</span>
+            </div>
+          </div>
+          <div className="hero-score-card">
+            <div
+              className="score-ring"
+              style={{ background: `conic-gradient(#3ddc97 ${telemetry.healthScore * 3.6}deg, #26313d 0deg)` }}
+              aria-label={`Health score ${telemetry.healthScore}%`}
+            >
+              <span>{telemetry.healthScore}%</span>
+            </div>
+            <strong>Local health score</strong>
+            <small>{signalCount}/4 platform checks healthy</small>
+          </div>
+          <div className="hero-mini-grid">
+            <MiniStat label="Services" value={deployments.length} />
+            <MiniStat label="Replicas" value={summary.replicas} />
+            <MiniStat label="Rollouts" value={activeRolloutCount} />
+            <MiniStat label="Alerts" value={summary.Failed} />
+          </div>
+        </section>
 
         <section className="pipeline-strip" aria-label="Delivery pipeline">
           {pipelineSteps.map((step) => (
@@ -433,6 +543,28 @@ function App() {
           <SummaryCard icon={<Server size={20} />} label="Running services" value={summary.Running} tone="blue" />
           <SummaryCard icon={<Layers size={20} />} label="Active replicas" value={summary.replicas} tone="violet" />
           <SummaryCard icon={<AlertTriangle size={20} />} label="Open failures" value={summary.Failed} tone="red" />
+        </section>
+
+        <section className="stack-panel" aria-label="InfraWatch platform stack">
+          <div className="panel-heading">
+            <div>
+              <span className="section-kicker">Stack Health</span>
+              <h2>What the user sees in one dashboard</h2>
+              <p>React stays as the main product UI. Grafana, Prometheus, Loki, and Alloy remain supporting tools for deeper inspection.</p>
+            </div>
+          </div>
+          <div className="stack-grid">
+            {platformSignals.map((signal) => (
+              <article className={`stack-card ${signal.tone}`} key={signal.label}>
+                <div className="stack-icon">{signal.icon}</div>
+                <div>
+                  <span>{signal.label}</span>
+                  <strong>{signal.value}</strong>
+                  <p>{signal.detail}</p>
+                </div>
+              </article>
+            ))}
+          </div>
         </section>
 
         <div className="dashboard-grid">
@@ -465,7 +597,7 @@ function App() {
             )}
           </section>
 
-          <section className="panel deploy-panel">
+          <section className="panel deploy-panel" id="deploy">
             <div className="panel-heading">
               <div>
                 <span className="section-kicker">Release Control</span>
@@ -535,12 +667,35 @@ function App() {
             </form>
           </section>
 
+          <section className="panel flow-panel">
+            <div className="panel-heading">
+              <div>
+                <span className="section-kicker">Project Flow</span>
+                <h2>How InfraWatch works</h2>
+              </div>
+            </div>
+            <div className="flow-list">
+              {flowSteps.map((step, index) => (
+                <article className="flow-step" key={step.title}>
+                  <div className="flow-index">
+                    <span>{index + 1}</span>
+                    {step.icon}
+                  </div>
+                  <div>
+                    <strong>{step.title}</strong>
+                    <p>{step.body}</p>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </section>
+
           <MetricChart area="cpu-card" title="CPU Allocation" value={`${telemetry.cpu.toFixed(2)} cores`} data={chartData} dataKey="cpu" color="#4da3ff" icon={<Cpu size={18} />} />
           <MetricChart area="memory-card" title="Memory Pressure" value={`${Math.round(telemetry.memory)} MB`} data={chartData} dataKey="memory" color="#3ddc97" icon={<HardDrive size={18} />} />
           <MetricChart area="requests-card" title="Request Throughput" value={`${telemetry.requests.toFixed(1)} rps`} data={chartData} dataKey="requests" color="#b38cff" icon={<Activity size={18} />} />
           <MetricChart area="errors-card" title="Error Rate" value={`${telemetry.errors.toFixed(2)} rps`} data={chartData} dataKey="errors" color="#ff6b7a" icon={<AlertTriangle size={18} />} />
 
-          <section className="panel fleet-panel">
+          <section className="panel fleet-panel" id="workloads">
             <div className="panel-heading">
               <div>
                 <span className="section-kicker">Deployment Inventory</span>
@@ -599,7 +754,7 @@ function App() {
             </div>
           </section>
 
-          <section className="panel logs-panel">
+          <section className="panel logs-panel" id="logs">
             <div className="panel-heading">
               <div>
                 <span className="section-kicker">Runtime Logs</span>
@@ -623,7 +778,7 @@ function App() {
             </div>
           </section>
 
-          <section className="panel audit-panel">
+          <section className="panel audit-panel" id="observability">
             <div className="panel-heading">
               <div>
                 <span className="section-kicker">Audit Trail</span>
@@ -663,6 +818,7 @@ function App() {
             </div>
             <Signal label="Control plane" value={isDemoMode || usingApiFallback ? "Browser sandbox ready" : "FastAPI online"} state="ok" />
             <Signal label="Metrics path" value={telemetryMode} state="ok" />
+            <Signal label="Log pipeline" value={isBrowserFallback ? "Mock logs" : "Alloy → Loki"} state="ok" />
             <Signal label="Average CPU" value={`${telemetry.avgCpu.toFixed(2)} cores`} state="ok" />
             <Signal label="Peak memory" value={`${Math.round(telemetry.peakMemory)} MB`} state="ok" />
             <Signal
@@ -673,6 +829,15 @@ function App() {
           </section>
         </div>
       </main>
+    </div>
+  );
+}
+
+function MiniStat({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="mini-stat">
+      <strong>{value}</strong>
+      <span>{label}</span>
     </div>
   );
 }
