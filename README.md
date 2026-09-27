@@ -153,6 +153,37 @@ For Kubernetes mode:
 From the project root:
 
 ```powershell
+.\scripts\start-local.ps1
+```
+
+This checks Docker, creates `.env` from `.env.example` if needed, validates Docker Compose, starts the full local stack, and prints every local dashboard URL.
+
+To start in the background:
+
+```powershell
+.\scripts\start-local.ps1 -Detached
+```
+
+To check prerequisites and print URLs without starting containers:
+
+```powershell
+.\scripts\start-local.ps1 -CheckOnly
+```
+
+The script starts:
+
+- InfraWatch React dashboard
+- FastAPI backend
+- PostgreSQL
+- Prometheus
+- Grafana
+- Loki
+- Grafana Alloy
+- Alertmanager
+
+Manual setup is also supported:
+
+```powershell
 copy .env.example .env
 ```
 
@@ -191,13 +222,13 @@ Password: value from GRAFANA_ADMIN_PASSWORD in .env
 Stop the stack:
 
 ```powershell
-docker compose down
+.\scripts\stop-local.ps1
 ```
 
 Stop and remove local volumes:
 
 ```powershell
-docker compose down --volumes --remove-orphans
+.\scripts\stop-local.ps1 -Volumes
 ```
 
 ---

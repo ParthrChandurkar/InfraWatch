@@ -10,6 +10,40 @@ InfraWatch is a local-first Kubernetes deployment and observability platform. It
 
 Use Docker Compose first. It starts the InfraWatch dashboard, API, database, Prometheus, Grafana, Loki, Grafana Alloy, and Alertmanager.
 
+Fastest path:
+
+```powershell
+.\scripts\start-local.ps1
+```
+
+Run it from the project root. The script checks Docker, creates `.env` if it is missing, validates the Compose file, starts the stack, and prints all local URLs.
+
+To run the stack in the background:
+
+```powershell
+.\scripts\start-local.ps1 -Detached
+```
+
+To check prerequisites without starting containers:
+
+```powershell
+.\scripts\start-local.ps1 -CheckOnly
+```
+
+To stop it:
+
+```powershell
+.\scripts\stop-local.ps1
+```
+
+To stop it and remove local Docker volumes:
+
+```powershell
+.\scripts\stop-local.ps1 -Volumes
+```
+
+Manual Docker Compose path:
+
 ```powershell
 copy .env.example .env
 docker compose up --build
