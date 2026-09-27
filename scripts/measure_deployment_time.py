@@ -20,7 +20,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Measure InfraWatch deployment duration.")
     parser.add_argument("--api-base", default="http://localhost:8000", help="FastAPI base URL.")
     parser.add_argument("--name", default="measurement-api", help="Service name.")
-    parser.add_argument("--image", default="docker.io/parthrchandurkar/infrawatch-backend:latest", help="Container image.")
+    parser.add_argument("--image", default="docker.io/parthchn178/infrawatch-backend:latest", help="Container image.")
     parser.add_argument("--replicas", type=int, default=1, help="Replica count.")
     parser.add_argument("--port", type=int, default=8000, help="Container/service port.")
     args = parser.parse_args()

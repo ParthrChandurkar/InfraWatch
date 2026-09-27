@@ -89,6 +89,38 @@ This is intentional for first-time users.
 
 After the Docker Compose stack works, use Minikube for real local Kubernetes deployment.
 
+Fastest path:
+
+```powershell
+.\scripts\start-k8s.ps1
+```
+
+This deploys InfraWatch into a local Minikube cluster and prints the dashboard URL.
+
+What is real in this mode:
+
+- Kubernetes namespace, services, deployments, StatefulSet, HPA, and rollout checks;
+- backend deployment actions when `INFRAWATCH_EXECUTE_KUBECTL=true`;
+- PostgreSQL-backed state inside the cluster.
+
+What still uses fallback data by default:
+
+- metrics/log responses, until Prometheus, Loki, and Grafana Alloy are installed.
+
+If you have already installed the observability stack and want strict Prometheus/Loki behavior:
+
+```powershell
+.\scripts\start-k8s.ps1 -StrictObservability
+```
+
+If you publish forked images under your own DockerHub account:
+
+```powershell
+.\scripts\start-k8s.ps1 -ImageRepository your-dockerhub-username
+```
+
+Manual path:
+
 ```powershell
 minikube start
 minikube addons enable metrics-server

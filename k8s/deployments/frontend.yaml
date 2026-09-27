@@ -18,7 +18,7 @@ spec:
     spec:
       containers:
         - name: frontend
-          image: docker.io/parthrchandurkar/infrawatch-frontend:latest
+          image: docker.io/parthchn178/infrawatch-frontend:latest
           imagePullPolicy: IfNotPresent
           securityContext:
             runAsNonRoot: true

@@ -347,6 +347,39 @@ Open:
 
 Kubernetes mode is the real local deployment path. It requires an active cluster.
 
+Fastest Minikube path:
+
+```powershell
+.\scripts\start-k8s.ps1
+```
+
+This checks Docker, `kubectl`, and Minikube, starts Minikube if needed, enables `metrics-server`, creates the `infrawatch` namespace and PostgreSQL secret, applies the Kubernetes manifests, waits for rollouts, and prints the dashboard URL.
+
+The default script uses these public DockerHub images:
+
+```text
+docker.io/parthchn178/infrawatch-backend:latest
+docker.io/parthchn178/infrawatch-frontend:latest
+```
+
+If you fork the project and publish images under your own DockerHub account, run:
+
+```powershell
+.\scripts\start-k8s.ps1 -ImageRepository your-dockerhub-username
+```
+
+By default, the script keeps mock observability fallback enabled in Kubernetes mode. That means deployments are real, but metrics/logs stay usable even before Prometheus, Loki, and Alloy are installed.
+
+For strict real observability only:
+
+```powershell
+.\scripts\start-k8s.ps1 -StrictObservability
+```
+
+Use strict mode only after installing the monitoring/logging stack.
+
+Manual Kubernetes path:
+
 Start Minikube:
 
 ```powershell
@@ -384,6 +417,12 @@ Install observability with Terraform/Helm:
 cd terraform
 terraform init
 terraform apply -var="grafana_admin_password=replace-with-a-strong-password"
+```
+
+Then restart strict Kubernetes mode if you want the backend to fail loudly when Prometheus/Loki are unavailable:
+
+```powershell
+.\scripts\start-k8s.ps1 -StrictObservability
 ```
 
 ---
