@@ -133,29 +133,40 @@ if ($LASTEXITCODE -ne 0) {
     Write-Warn "metrics-server addon could not be enabled automatically. InfraWatch can still start, but kubectl top/HPA metrics may be delayed."
 }
 
-if ([string]::IsNullOrWhiteSpace($PostgresPassword)) {
-    $PostgresPassword = New-LocalPassword
-    Write-Warn "Generated a local PostgreSQL password for this cluster. It is stored only in the Kubernetes secret."
-}
-
-$EncodedPostgresPassword = [System.Uri]::EscapeDataString($PostgresPassword)
-$DatabaseUrl = "postgresql://infrawatch:$EncodedPostgresPassword@infrawatch-postgres:5432/infrawatch"
-
 Write-Info "Creating namespace"
 & kubectl apply -f k8s/namespace.yaml
 Assert-LastCommand "Could not create or update the infrawatch namespace."
 
-Write-Info "Creating PostgreSQL connection secret"
-$SecretYaml = & kubectl create secret generic infrawatch-secrets `
-    --namespace $Namespace `
-    "--from-literal=POSTGRES_PASSWORD=$PostgresPassword" `
-    "--from-literal=DATABASE_URL=$DatabaseUrl" `
-    --dry-run=client `
-    -o yaml
-Assert-LastCommand "Could not build the infrawatch-secrets manifest."
+$SecretExists = (Invoke-NativeQuiet -Command "kubectl" -Arguments @("get", "secret", "infrawatch-secrets", "--namespace", $Namespace)) -eq 0
+$ShouldApplySecret = $true
 
-$SecretYaml | & kubectl apply -f -
-Assert-LastCommand "Could not apply the infrawatch-secrets secret."
+if ([string]::IsNullOrWhiteSpace($PostgresPassword) -and $SecretExists) {
+    $ShouldApplySecret = $false
+    Write-Info "Using existing PostgreSQL connection secret"
+}
+else {
+    if ([string]::IsNullOrWhiteSpace($PostgresPassword)) {
+        $PostgresPassword = New-LocalPassword
+        Write-Warn "Generated a local PostgreSQL password for this cluster. It is stored only in the Kubernetes secret."
+    }
+
+    $EncodedPostgresPassword = [System.Uri]::EscapeDataString($PostgresPassword)
+    $DatabaseUrl = "postgresql://infrawatch:$EncodedPostgresPassword@infrawatch-postgres:5432/infrawatch"
+}
+
+if ($ShouldApplySecret) {
+    Write-Info "Creating PostgreSQL connection secret"
+    $SecretYaml = & kubectl create secret generic infrawatch-secrets `
+        --namespace $Namespace `
+        "--from-literal=POSTGRES_PASSWORD=$PostgresPassword" `
+        "--from-literal=DATABASE_URL=$DatabaseUrl" `
+        --dry-run=client `
+        -o yaml
+    Assert-LastCommand "Could not build the infrawatch-secrets manifest."
+
+    $SecretYaml | & kubectl apply -f -
+    Assert-LastCommand "Could not apply the infrawatch-secrets secret."
+}
 
 Write-Info "Applying InfraWatch Kubernetes manifests"
 & kubectl apply -k k8s
@@ -170,9 +181,21 @@ else {
 }
 
 Write-Info "Configuring backend observability mode"
-$Patch = '{"data":{"INFRAWATCH_ALLOW_MOCK_OBSERVABILITY":"' + $AllowMockObservability + '"}}'
-& kubectl patch configmap infrawatch-backend-config --namespace $Namespace --type merge --patch $Patch
-Assert-LastCommand "Could not patch the backend ConfigMap."
+$Patch = @{
+    data = @{
+        INFRAWATCH_ALLOW_MOCK_OBSERVABILITY = $AllowMockObservability
+    }
+} | ConvertTo-Json -Compress
+
+$PatchFile = New-TemporaryFile
+try {
+    Set-Content -LiteralPath $PatchFile -Value $Patch -Encoding UTF8
+    & kubectl patch configmap infrawatch-backend-config --namespace $Namespace --type merge "--patch-file=$PatchFile"
+    Assert-LastCommand "Could not patch the backend ConfigMap."
+}
+finally {
+    Remove-Item -LiteralPath $PatchFile -Force -ErrorAction SilentlyContinue
+}
 
 $CleanImageRepository = $ImageRepository.Trim().Trim("/")
 if ([string]::IsNullOrWhiteSpace($CleanImageRepository)) {

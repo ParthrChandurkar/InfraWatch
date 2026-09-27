@@ -129,6 +129,22 @@ if ($CheckOnly) {
 }
 
 if ($RemoveData) {
+    $HostPathPrefix = "/tmp/hostpath-provisioner/$Namespace/"
+    $VolumeNames = @()
+    $HostPaths = @()
+
+    $PvcVolumes = & kubectl get pvc --namespace $Namespace -o jsonpath="{range .items[*]}{.spec.volumeName}{'\n'}{end}" 2>$null
+    if ($LASTEXITCODE -eq 0 -and $PvcVolumes) {
+        $VolumeNames = @($PvcVolumes -split "`r?`n" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    }
+
+    foreach ($VolumeName in $VolumeNames) {
+        $HostPath = & kubectl get pv $VolumeName -o jsonpath="{.spec.hostPath.path}" 2>$null
+        if ($LASTEXITCODE -eq 0 -and $HostPath -and $HostPath.StartsWith($HostPathPrefix)) {
+            $HostPaths += $HostPath
+        }
+    }
+
     Write-Warn "Removing namespace '$Namespace'. This deletes InfraWatch Kubernetes resources, secrets, and local PVC data in that namespace."
     & kubectl delete namespace $Namespace --ignore-not-found=true
     Assert-LastCommand "Could not delete namespace '$Namespace'."
@@ -136,6 +152,28 @@ if ($RemoveData) {
     & kubectl wait "--for=delete" "namespace/$Namespace" --timeout=120s 2>$null
     if ($LASTEXITCODE -ne 0) {
         Write-Warn "Namespace deletion is still finishing in the background."
+    }
+
+    foreach ($VolumeName in $VolumeNames) {
+        & kubectl delete pv $VolumeName --ignore-not-found=true
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warn "PersistentVolume '$VolumeName' could not be deleted automatically."
+        }
+    }
+
+    if ($HostPaths.Count -gt 0 -and (Test-CommandAvailable "minikube")) {
+        foreach ($HostPath in $HostPaths) {
+            if (-not $HostPath.StartsWith($HostPathPrefix)) {
+                Write-Warn "Skipping unexpected hostPath outside InfraWatch namespace: $HostPath"
+                continue
+            }
+
+            Write-Info "Removing Minikube hostPath data: $HostPath"
+            & minikube ssh -- "sudo rm -rf '$HostPath'"
+            if ($LASTEXITCODE -ne 0) {
+                Write-Warn "Could not remove Minikube hostPath data at $HostPath."
+            }
+        }
     }
 }
 else {
