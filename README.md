@@ -233,6 +233,29 @@ Stop and remove local volumes:
 
 ---
 
+## 🩺 Check Your Local Setup
+
+Run the doctor script when something does not start or when you want to confirm your machine is ready:
+
+```powershell
+.\scripts\doctor.ps1
+```
+
+It checks:
+
+- required InfraWatch files
+- `.env` presence
+- Docker and Docker Compose
+- running InfraWatch containers
+- `kubectl`, Kustomize rendering, and current context
+- Minikube status
+- Kubernetes namespace, pods, and services when a cluster is reachable
+- local dashboard/API/Grafana/Prometheus URLs
+
+The script does not change local infrastructure. It reports clear `PASS`, `WARN`, and `FAIL` lines.
+
+---
+
 ## 🔌 If Ports Are Already Used
 
 If another project already uses `3000`, `8000`, or `5432`, set alternate ports in `.env`:
@@ -377,6 +400,24 @@ For strict real observability only:
 ```
 
 Use strict mode only after installing the monitoring/logging stack.
+
+To pause Kubernetes workloads while preserving namespace, secrets, and data:
+
+```powershell
+.\scripts\stop-k8s.ps1
+```
+
+To remove the InfraWatch namespace and local Kubernetes data:
+
+```powershell
+.\scripts\stop-k8s.ps1 -RemoveData
+```
+
+To also stop Minikube:
+
+```powershell
+.\scripts\stop-k8s.ps1 -StopMinikube
+```
 
 Manual Kubernetes path:
 

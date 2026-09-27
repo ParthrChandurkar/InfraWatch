@@ -57,8 +57,15 @@ function Assert-LastCommand {
 
 function New-LocalPassword {
     $bytes = [byte[]]::new(18)
-    [System.Security.Cryptography.RandomNumberGenerator]::Fill($bytes)
-    return [Convert]::ToBase64String($bytes).Replace("+", "p").Replace("/", "s").TrimEnd("=")
+    $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+
+    try {
+        $rng.GetBytes($bytes)
+        return [Convert]::ToBase64String($bytes).Replace("+", "p").Replace("/", "s").TrimEnd("=")
+    }
+    finally {
+        $rng.Dispose()
+    }
 }
 
 $RepoRoot = Split-Path -Parent $PSScriptRoot

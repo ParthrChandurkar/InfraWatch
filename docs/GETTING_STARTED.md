@@ -42,6 +42,14 @@ To stop it and remove local Docker volumes:
 .\scripts\stop-local.ps1 -Volumes
 ```
 
+If something looks wrong, run:
+
+```powershell
+.\scripts\doctor.ps1
+```
+
+The doctor script checks Docker, Docker Compose, Kubernetes tooling, Minikube, manifests, running services, and local URLs without changing your machine.
+
 Manual Docker Compose path:
 
 ```powershell
@@ -117,6 +125,18 @@ If you publish forked images under your own DockerHub account:
 
 ```powershell
 .\scripts\start-k8s.ps1 -ImageRepository your-dockerhub-username
+```
+
+To pause the Kubernetes workloads but keep local data:
+
+```powershell
+.\scripts\stop-k8s.ps1
+```
+
+To delete the InfraWatch Kubernetes namespace, secrets, and local PVC data:
+
+```powershell
+.\scripts\stop-k8s.ps1 -RemoveData
 ```
 
 Manual path:
