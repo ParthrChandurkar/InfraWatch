@@ -434,10 +434,28 @@ To install the stack but keep fallback metrics/logs enabled:
 .\scripts\start-observability.ps1 -KeepFallback
 ```
 
+To pause only the observability stack and stop its local port-forwards:
+
+```powershell
+.\scripts\stop-observability.ps1
+```
+
+To fully uninstall the local observability stack:
+
+```powershell
+.\scripts\stop-observability.ps1 -UninstallStack
+```
+
 To pause Kubernetes workloads while preserving namespace, secrets, and data:
 
 ```powershell
 .\scripts\stop-k8s.ps1
+```
+
+By default, `stop-k8s.ps1` also pauses observability workloads to save laptop resources. If you want observability to keep running:
+
+```powershell
+.\scripts\stop-k8s.ps1 -KeepObservability
 ```
 
 To remove the InfraWatch namespace and local Kubernetes data:

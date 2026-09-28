@@ -1,5 +1,5 @@
 param(
-    [int]$TimeoutSeconds = 3,
+    [int]$TimeoutSeconds = 10,
     [string]$Namespace = "infrawatch"
 )
 
@@ -183,6 +183,7 @@ foreach ($path in @(
     "scripts/start-k8s.ps1",
     "scripts/stop-k8s.ps1",
     "scripts/start-observability.ps1",
+    "scripts/stop-observability.ps1",
     "scripts/doctor.ps1"
 )) {
     if (Test-Path -LiteralPath (Join-Path $RepoRoot $path)) {
@@ -376,12 +377,12 @@ else {
     Write-WarnCheck "Minikube is not installed. Docker Compose mode can still be used."
 }
 
-Test-HttpEndpoint -Name "InfraWatch dashboard" -Url "http://localhost:$FrontendPort"
-Test-HttpEndpoint -Name "FastAPI docs" -Url "http://localhost:$BackendPort/docs"
-Test-HttpEndpoint -Name "Prometheus" -Url "http://localhost:$PrometheusPort/-/ready"
-Test-HttpEndpoint -Name "Grafana" -Url "http://localhost:$GrafanaPort/api/health"
-Test-HttpEndpoint -Name "Loki" -Url "http://localhost:$LokiPort/loki/api/v1/status/buildinfo"
-Test-HttpEndpoint -Name "Alertmanager" -Url "http://localhost:$AlertmanagerPort/-/ready"
+Test-HttpEndpoint -Name "InfraWatch dashboard" -Url "http://127.0.0.1:$FrontendPort"
+Test-HttpEndpoint -Name "FastAPI docs" -Url "http://127.0.0.1:$BackendPort/docs"
+Test-HttpEndpoint -Name "Prometheus" -Url "http://127.0.0.1:$PrometheusPort/-/ready"
+Test-HttpEndpoint -Name "Grafana" -Url "http://127.0.0.1:$GrafanaPort/api/health"
+Test-HttpEndpoint -Name "Loki" -Url "http://127.0.0.1:$LokiPort/loki/api/v1/status/buildinfo"
+Test-HttpEndpoint -Name "Alertmanager" -Url "http://127.0.0.1:$AlertmanagerPort/-/ready"
 
 Write-Host ""
 if ($script:Failures -gt 0) {

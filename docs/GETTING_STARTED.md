@@ -136,6 +136,18 @@ After it finishes, open:
 | Alertmanager | http://localhost:9093 |
 | Loki | http://localhost:3100 |
 
+To pause observability and stop the local port-forwards:
+
+```powershell
+.\scripts\stop-observability.ps1
+```
+
+To fully remove the observability stack:
+
+```powershell
+.\scripts\stop-observability.ps1 -UninstallStack
+```
+
 If you have already installed the observability stack separately and want strict Prometheus/Loki behavior:
 
 ```powershell

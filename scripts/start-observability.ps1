@@ -170,8 +170,52 @@ function Start-PortForward {
 
     $portMapping = "${LocalPort}:${RemotePort}"
     $arguments = @("port-forward", "--namespace", $Namespace, $Resource, $portMapping)
-    $process = Start-Process -FilePath "kubectl" -ArgumentList $arguments -WindowStyle Hidden -PassThru
-    Write-Host "  $Name : http://localhost:$LocalPort  (port-forward pid $($process.Id))"
+    $safeName = $Name.ToLowerInvariant() -replace "[^a-z0-9-]", "-"
+    $stdoutPath = Join-Path $PortForwardLogDir "$safeName.out.log"
+    $stderrPath = Join-Path $PortForwardLogDir "$safeName.err.log"
+    Remove-Item -LiteralPath $stdoutPath -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $stderrPath -Force -ErrorAction SilentlyContinue
+
+    $process = Start-Process `
+        -FilePath "kubectl" `
+        -ArgumentList $arguments `
+        -WindowStyle Hidden `
+        -RedirectStandardOutput $stdoutPath `
+        -RedirectStandardError $stderrPath `
+        -PassThru
+
+    Start-Sleep -Seconds 2
+    $process.Refresh()
+    if ($process.HasExited) {
+        Write-Warn "$Name port-forward exited immediately. See $stderrPath"
+        return
+    }
+
+    $isReady = $false
+    foreach ($attempt in 1..8) {
+        if (Test-TcpPort -HostName "127.0.0.1" -Port $LocalPort) {
+            $isReady = $true
+            break
+        }
+
+        Start-Sleep -Milliseconds 500
+    }
+
+    if (-not $isReady) {
+        Write-Warn "$Name port-forward started with pid $($process.Id), but localhost:$LocalPort did not become reachable. See $stderrPath"
+    }
+
+    $script:StartedPortForwards += [pscustomobject]@{
+        name = $Name
+        resource = $Resource
+        localPort = $LocalPort
+        remotePort = $RemotePort
+        pid = $process.Id
+        url = "http://127.0.0.1:$LocalPort"
+        stdout = $stdoutPath
+        stderr = $stderrPath
+    }
+    Write-Host "  $Name : http://127.0.0.1:$LocalPort  (port-forward pid $($process.Id))"
 }
 
 function Apply-ConfigMapFromFiles {
@@ -227,6 +271,10 @@ function Test-HelmReleaseExists {
 
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 $EnvPath = Join-Path $RepoRoot ".env"
+$StateDir = Join-Path $RepoRoot ".infrawatch"
+$PortForwardLogDir = Join-Path $StateDir "port-forward-logs"
+$PortForwardStatePath = Join-Path $StateDir "observability-port-forwards.json"
+$script:StartedPortForwards = @()
 
 Set-Location -LiteralPath $RepoRoot
 
@@ -387,10 +435,15 @@ Write-Host ""
 
 if (-not $NoPortForward) {
     Write-Host "Starting local port-forwards" -ForegroundColor Green
+    New-Item -ItemType Directory -Path $StateDir -Force | Out-Null
+    New-Item -ItemType Directory -Path $PortForwardLogDir -Force | Out-Null
+    Remove-Item -LiteralPath $PortForwardStatePath -Force -ErrorAction SilentlyContinue
     Start-PortForward -Name "Grafana" -Resource "svc/infrawatch-grafana" -LocalPort 3001 -RemotePort 80
     Start-PortForward -Name "Prometheus" -Resource "svc/infrawatch-prometheus" -LocalPort 9090 -RemotePort 9090
     Start-PortForward -Name "Alertmanager" -Resource "svc/infrawatch-alertmanager" -LocalPort 9093 -RemotePort 9093
     Start-PortForward -Name "Loki" -Resource "svc/infrawatch-loki-gateway" -LocalPort 3100 -RemotePort 80
+    $script:StartedPortForwards | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $PortForwardStatePath -Encoding UTF8
+    Write-Host "  PID file : $PortForwardStatePath"
 }
 else {
     Write-Host "Port-forward commands"
@@ -402,7 +455,7 @@ else {
 
 Write-Host ""
 Write-Host "Local URLs"
-Write-Host "  Grafana      : http://localhost:3001"
-Write-Host "  Prometheus   : http://localhost:9090"
-Write-Host "  Alertmanager : http://localhost:9093"
-Write-Host "  Loki         : http://localhost:3100"
+Write-Host "  Grafana      : http://127.0.0.1:3001"
+Write-Host "  Prometheus   : http://127.0.0.1:9090"
+Write-Host "  Alertmanager : http://127.0.0.1:9093"
+Write-Host "  Loki         : http://127.0.0.1:3100"

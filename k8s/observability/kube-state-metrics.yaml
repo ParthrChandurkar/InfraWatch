@@ -67,15 +67,13 @@ spec:
             - name: telemetry
               containerPort: 8081
           readinessProbe:
-            httpGet:
-              path: /readyz
+            tcpSocket:
               port: telemetry
             initialDelaySeconds: 10
             periodSeconds: 10
             timeoutSeconds: 5
           livenessProbe:
-            httpGet:
-              path: /livez
+            tcpSocket:
               port: telemetry
             initialDelaySeconds: 30
             periodSeconds: 20

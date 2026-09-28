@@ -1,6 +1,7 @@
 param(
     [switch]$RemoveData,
     [switch]$StopMinikube,
+    [switch]$KeepObservability,
     [switch]$CheckOnly
 )
 
@@ -125,6 +126,9 @@ if ($CheckOnly) {
     Write-Host ""
     Write-Host "To remove all InfraWatch Kubernetes data:"
     Write-Host "  .\scripts\stop-k8s.ps1 -RemoveData"
+    Write-Host ""
+    Write-Host "To keep observability running while pausing the app:"
+    Write-Host "  .\scripts\stop-k8s.ps1 -KeepObservability"
     exit 0
 }
 
@@ -177,6 +181,15 @@ if ($RemoveData) {
     }
 }
 else {
+    if (-not $KeepObservability -and (Test-Path -LiteralPath (Join-Path $PSScriptRoot "stop-observability.ps1"))) {
+        Write-Info "Stopping observability workloads first"
+        $PowerShellExecutable = (Get-Process -Id $PID).Path
+        & $PowerShellExecutable -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "stop-observability.ps1") -Namespace $Namespace
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warn "Observability stop script reported a problem. Continuing with app workload stop."
+        }
+    }
+
     Write-Info "Deleting HPA so it does not scale paused workloads back up"
     & kubectl delete hpa infrawatch-backend --namespace $Namespace --ignore-not-found=true
     Assert-LastCommand "Could not delete the backend HPA."
