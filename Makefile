@@ -3,12 +3,20 @@ SHELL := /bin/sh
 
 K8S_NAMESPACE ?= infrawatch
 
-.PHONY: up deploy monitor logs clean test
+.PHONY: up terraform-init terraform-apply deploy monitor logs clean test
 
 up:
 	docker compose up --build
 
-deploy:
+terraform-init:
+	terraform -chdir=terraform init
+	terraform -chdir=terraform fmt -check
+	terraform -chdir=terraform validate
+
+terraform-apply: terraform-init
+	terraform -chdir=terraform apply
+
+deploy: terraform-apply
 	kubectl apply -k k8s
 
 monitor:

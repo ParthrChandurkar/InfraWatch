@@ -43,7 +43,9 @@ class PrometheusClient:
             error_rate = await self._query_range(
                 f'sum(rate(http_requests_total{{service="{service}",status=~"5.."}}[2m]))'
             )
-            if self._settings.allow_mock_observability and not all([cpu, memory, request_rate, error_rate]):
+            if not error_rate:
+                error_rate = self._zero_series_like(request_rate, cpu, memory)
+            if self._settings.allow_mock_observability and not all([cpu, memory, request_rate]):
                 return self._mock_metrics(service)
             return ServiceMetrics(
                 service=service,
@@ -76,6 +78,14 @@ class PrometheusClient:
             MetricPoint(timestamp=int(point[0]), value=float(point[1]))
             for point in result[0]["values"]
         ]
+
+    def _zero_series_like(self, *series_options: list[MetricPoint]) -> list[MetricPoint]:
+        """Return a zero-valued series using timestamps from the first available real series."""
+
+        for series in series_options:
+            if series:
+                return [MetricPoint(timestamp=point.timestamp, value=0.0) for point in series]
+        return []
 
     def _mock_metrics(self, service: str) -> ServiceMetrics:
         """Produce stable, service-specific time series for demos and tests."""

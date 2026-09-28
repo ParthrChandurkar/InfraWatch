@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 
 from app.config import Settings
 from app.main import create_app
+from app.schemas import MetricPoint
 from app.services.observability import PrometheusClient
 
 
@@ -141,3 +142,23 @@ def test_empty_prometheus_series_falls_back_to_mock_metrics() -> None:
     metrics = asyncio.run(client.service_metrics("catalog-api"))
     assert metrics.source == "mock"
     assert len(metrics.cpu_cores) == 15
+
+
+def test_empty_prometheus_error_series_means_zero_errors_not_mock_metrics() -> None:
+    """No 5xx samples is a healthy zero-error state, not missing telemetry."""
+
+    settings = Settings(environment="test", allow_mock_observability=True)
+    client = PrometheusClient(settings)
+    points = [MetricPoint(timestamp=100 + index, value=float(index + 1)) for index in range(3)]
+
+    async def mostly_live_query(query: str):
+        if 'status=~"5.."' in query:
+            return []
+        return points
+
+    client._query_range = mostly_live_query  # type: ignore[method-assign]
+
+    metrics = asyncio.run(client.service_metrics("infrawatch-backend"))
+    assert metrics.source == "prometheus"
+    assert [point.value for point in metrics.error_rate] == [0.0, 0.0, 0.0]
+    assert [point.timestamp for point in metrics.error_rate] == [100, 101, 102]

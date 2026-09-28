@@ -8,6 +8,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+$env:PATH = [Environment]::GetEnvironmentVariable("PATH", "Machine") + ";" + [Environment]::GetEnvironmentVariable("PATH", "User")
 
 function Write-Info {
     param([string]$Message)
@@ -57,6 +58,31 @@ function Assert-LastCommand {
     }
 }
 
+function Import-TerraformResourceIfExists {
+    param(
+        [string]$Address,
+        [string]$ImportId,
+        [string[]]$KubectlArguments
+    )
+
+    $inState = Invoke-NativeQuiet -Command "terraform" -Arguments @("-chdir=terraform", "state", "show", $Address)
+    if ($inState -eq 0) {
+        Write-Host "Terraform state already contains $Address"
+        return
+    }
+
+    $exists = Invoke-NativeQuiet -Command "kubectl" -Arguments $KubectlArguments
+    if ($exists -eq 0) {
+        $imported = Invoke-NativeQuiet -Command "terraform" -Arguments @("-chdir=terraform", "import", "-var=kube_context=minikube", $Address, $ImportId)
+        if ($imported -eq 0) {
+            Write-Host "Terraform imported $Address"
+        }
+        else {
+            Write-Warn "Terraform import skipped or failed for $Address. Continuing; terraform apply will report any real drift."
+        }
+    }
+}
+
 function New-LocalPassword {
     $bytes = [byte[]]::new(18)
     $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
@@ -79,7 +105,7 @@ Write-Host ""
 Write-Host "InfraWatch local Kubernetes stack" -ForegroundColor Green
 Write-Host ""
 
-foreach ($command in @("docker", "kubectl", "minikube")) {
+foreach ($command in @("docker", "kubectl", "minikube", "terraform")) {
     if (-not (Test-CommandAvailable $command)) {
         Write-Fail "$command was not found. Install $command and run this script again."
         exit 1
@@ -136,9 +162,27 @@ if ($LASTEXITCODE -ne 0) {
     Write-Warn "metrics-server addon could not be enabled automatically. InfraWatch can still start, but kubectl top/HPA metrics may be delayed."
 }
 
-Write-Info "Creating namespace"
-& kubectl apply -f k8s/namespace.yaml
-Assert-LastCommand "Could not create or update the infrawatch namespace."
+Write-Info "Applying Terraform-managed InfraWatch foundation"
+& terraform -chdir=terraform init
+Assert-LastCommand "Terraform init failed."
+
+& terraform -chdir=terraform fmt -check
+Assert-LastCommand "Terraform formatting check failed. Run 'terraform -chdir=terraform fmt'."
+
+& terraform -chdir=terraform validate
+Assert-LastCommand "Terraform validation failed."
+
+Import-TerraformResourceIfExists -Address "kubernetes_namespace_v1.infrawatch" -ImportId $Namespace -KubectlArguments @("get", "namespace", $Namespace)
+Import-TerraformResourceIfExists -Address "kubernetes_service_account_v1.backend" -ImportId "$Namespace/infrawatch-backend" -KubectlArguments @("get", "serviceaccount", "infrawatch-backend", "--namespace", $Namespace)
+Import-TerraformResourceIfExists -Address "kubernetes_cluster_role_v1.local_reader" -ImportId "infrawatch-local-reader" -KubectlArguments @("get", "clusterrole", "infrawatch-local-reader")
+Import-TerraformResourceIfExists -Address "kubernetes_cluster_role_binding_v1.local_reader" -ImportId "infrawatch-local-reader" -KubectlArguments @("get", "clusterrolebinding", "infrawatch-local-reader")
+Import-TerraformResourceIfExists -Address "kubernetes_role_v1.deployer" -ImportId "$Namespace/infrawatch-deployer" -KubectlArguments @("get", "role", "infrawatch-deployer", "--namespace", $Namespace)
+Import-TerraformResourceIfExists -Address "kubernetes_role_binding_v1.deployer" -ImportId "$Namespace/infrawatch-deployer" -KubectlArguments @("get", "rolebinding", "infrawatch-deployer", "--namespace", $Namespace)
+Import-TerraformResourceIfExists -Address "kubernetes_resource_quota_v1.infrawatch" -ImportId "$Namespace/infrawatch-quota" -KubectlArguments @("get", "resourcequota", "infrawatch-quota", "--namespace", $Namespace)
+Import-TerraformResourceIfExists -Address "kubernetes_config_map_v1.backend_config" -ImportId "$Namespace/infrawatch-backend-config" -KubectlArguments @("get", "configmap", "infrawatch-backend-config", "--namespace", $Namespace)
+
+& terraform -chdir=terraform apply -auto-approve "-var=kube_context=minikube"
+Assert-LastCommand "Terraform foundation apply failed."
 
 $SecretExists = (Invoke-NativeQuiet -Command "kubectl" -Arguments @("get", "secret", "infrawatch-secrets", "--namespace", $Namespace)) -eq 0
 $ShouldApplySecret = $true
@@ -249,6 +293,6 @@ Write-Host "  kubectl get pods,svc --namespace infrawatch"
 Write-Host "  kubectl logs deployment/infrawatch-backend --namespace infrawatch"
 Write-Host "  kubectl port-forward svc/infrawatch-backend --namespace infrawatch 8000:8000"
 Write-Host ""
-Write-Host "If you install the Terraform observability stack, Grafana and Prometheus can be opened with:"
+Write-Host "If you install the lightweight observability stack with .\scripts\start-observability.ps1, Grafana and Prometheus can be opened with:"
 Write-Host "  kubectl port-forward svc/infrawatch-grafana --namespace infrawatch 3001:80"
-Write-Host "  kubectl port-forward svc/infrawatch-kube-prometheus-prometheus --namespace infrawatch 9090:9090"
+Write-Host "  kubectl port-forward svc/infrawatch-prometheus --namespace infrawatch 9090:9090"

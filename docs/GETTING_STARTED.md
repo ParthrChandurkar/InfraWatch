@@ -95,9 +95,23 @@ This is intentional for first-time users.
 
 ## 3. Try real local Kubernetes
 
-After the Docker Compose stack works, use Minikube for real local Kubernetes deployment.
+After the Docker Compose stack works, use a local Kubernetes cluster for real local Kubernetes deployment.
 
-Fastest path:
+Linux/macOS Bash path:
+
+```bash
+bash scripts/setup.sh
+```
+
+This checks prerequisites, applies the Terraform-managed local Kubernetes foundation, creates the local PostgreSQL secret when missing, applies the Kubernetes manifests, and waits for rollouts.
+
+Read-only health check:
+
+```bash
+bash scripts/health-check.sh
+```
+
+Windows PowerShell Minikube path:
 
 ```powershell
 .\scripts\start-k8s.ps1
@@ -107,13 +121,16 @@ This deploys InfraWatch into a local Minikube cluster and prints the dashboard U
 
 What is real in this mode:
 
-- Kubernetes namespace, services, deployments, StatefulSet, HPA, and rollout checks;
+- Terraform-managed namespace, RBAC, ResourceQuota, and backend ConfigMap;
+- Kubernetes services, deployments, StatefulSet, HPA, and rollout checks;
 - backend deployment actions when `INFRAWATCH_EXECUTE_KUBECTL=true`;
 - PostgreSQL-backed state inside the cluster.
 
 What still uses fallback data by default:
 
 - metrics/log responses, until Prometheus, Loki, and Grafana Alloy are installed.
+
+If fallback remains enabled, InfraWatch uses `source: mock` only when required Prometheus/Loki data is missing. A service with real Prometheus CPU, memory, and request-rate data but zero 5xx errors should report `source: prometheus` with a zero error-rate series.
 
 Install the observability stack:
 
@@ -166,18 +183,29 @@ To pause the Kubernetes workloads but keep local data:
 .\scripts\stop-k8s.ps1
 ```
 
-To delete the InfraWatch Kubernetes namespace, secrets, and local PVC data:
+To delete the InfraWatch Kubernetes namespace, secrets, and local PVC data safely:
 
 ```powershell
 .\scripts\stop-k8s.ps1 -RemoveData
 ```
+
+This removes Helm/Kustomize-owned workloads first and then destroys the Terraform-owned foundation. Use this instead of running raw `terraform destroy` while workloads still exist in the namespace.
 
 Manual path:
 
 ```powershell
 minikube start
 minikube addons enable metrics-server
-kubectl apply -f k8s/namespace.yaml
+cd terraform
+terraform init
+terraform fmt
+terraform validate
+terraform apply -var="kube_context=minikube"
+cd ..
+kubectl create secret generic infrawatch-secrets `
+  --namespace infrawatch `
+  --from-literal=POSTGRES_PASSWORD=use-a-strong-password `
+  --from-literal=DATABASE_URL=postgresql://infrawatch:use-a-strong-password@infrawatch-postgres:5432/infrawatch
 kubectl apply -k k8s
 ```
 

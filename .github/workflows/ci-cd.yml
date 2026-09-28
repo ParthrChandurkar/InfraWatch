@@ -65,6 +65,15 @@ jobs:
       - name: Build frontend image locally
         run: docker build -t infrawatch-frontend:test ./frontend
 
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Validate Terraform foundation
+        run: |
+          terraform -chdir=terraform init -backend=false
+          terraform -chdir=terraform fmt -check
+          terraform -chdir=terraform validate
+
   publish:
     name: Publish immutable images
     needs: validate
@@ -189,6 +198,32 @@ jobs:
           echo "$KUBE_CONFIG_B64" | base64 --decode > "$HOME/.kube/config"
           chmod 600 "$HOME/.kube/config"
 
+      - name: Set up Terraform
+        if: env.KUBE_DEPLOY_ENABLED == 'true'
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Apply Terraform foundation
+        if: env.KUBE_DEPLOY_ENABLED == 'true'
+        run: |
+          terraform -chdir=terraform init
+          import_if_exists() {
+            address="$1"
+            import_id="$2"
+            shift 2
+            if kubectl "$@" >/dev/null 2>&1; then
+              terraform -chdir=terraform import "$address" "$import_id" || true
+            fi
+          }
+          import_if_exists kubernetes_namespace_v1.infrawatch infrawatch get namespace infrawatch
+          import_if_exists kubernetes_service_account_v1.backend infrawatch/infrawatch-backend get serviceaccount infrawatch-backend --namespace infrawatch
+          import_if_exists kubernetes_cluster_role_v1.local_reader infrawatch-local-reader get clusterrole infrawatch-local-reader
+          import_if_exists kubernetes_cluster_role_binding_v1.local_reader infrawatch-local-reader get clusterrolebinding infrawatch-local-reader
+          import_if_exists kubernetes_role_v1.deployer infrawatch/infrawatch-deployer get role infrawatch-deployer --namespace infrawatch
+          import_if_exists kubernetes_role_binding_v1.deployer infrawatch/infrawatch-deployer get rolebinding infrawatch-deployer --namespace infrawatch
+          import_if_exists kubernetes_resource_quota_v1.infrawatch infrawatch/infrawatch-quota get resourcequota infrawatch-quota --namespace infrawatch
+          import_if_exists kubernetes_config_map_v1.backend_config infrawatch/infrawatch-backend-config get configmap infrawatch-backend-config --namespace infrawatch
+          terraform -chdir=terraform apply -auto-approve
+
       - name: Apply Kubernetes manifests
         if: env.KUBE_DEPLOY_ENABLED == 'true'
         run: kubectl apply -k k8s
@@ -248,10 +283,37 @@ jobs:
           kubectl config current-context
           kubectl get nodes
 
-      - name: Prepare namespace, database secret, and DockerHub pull secret
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Apply Terraform local foundation
         shell: powershell
         run: |
-          kubectl apply -f k8s/namespace.yaml
+          terraform -chdir=terraform init
+          function Import-IfExists {
+            param(
+              [string]$Address,
+              [string]$ImportId,
+              [string[]]$KubectlArguments
+            )
+            kubectl @KubectlArguments > $null 2>&1
+            if ($LASTEXITCODE -eq 0) {
+              terraform -chdir=terraform import "-var=kube_context=minikube" $Address $ImportId
+            }
+          }
+          Import-IfExists "kubernetes_namespace_v1.infrawatch" "infrawatch" @("get", "namespace", "infrawatch")
+          Import-IfExists "kubernetes_service_account_v1.backend" "infrawatch/infrawatch-backend" @("get", "serviceaccount", "infrawatch-backend", "--namespace", "infrawatch")
+          Import-IfExists "kubernetes_cluster_role_v1.local_reader" "infrawatch-local-reader" @("get", "clusterrole", "infrawatch-local-reader")
+          Import-IfExists "kubernetes_cluster_role_binding_v1.local_reader" "infrawatch-local-reader" @("get", "clusterrolebinding", "infrawatch-local-reader")
+          Import-IfExists "kubernetes_role_v1.deployer" "infrawatch/infrawatch-deployer" @("get", "role", "infrawatch-deployer", "--namespace", "infrawatch")
+          Import-IfExists "kubernetes_role_binding_v1.deployer" "infrawatch/infrawatch-deployer" @("get", "rolebinding", "infrawatch-deployer", "--namespace", "infrawatch")
+          Import-IfExists "kubernetes_resource_quota_v1.infrawatch" "infrawatch/infrawatch-quota" @("get", "resourcequota", "infrawatch-quota", "--namespace", "infrawatch")
+          Import-IfExists "kubernetes_config_map_v1.backend_config" "infrawatch/infrawatch-backend-config" @("get", "configmap", "infrawatch-backend-config", "--namespace", "infrawatch")
+          terraform -chdir=terraform apply -auto-approve "-var=kube_context=minikube"
+
+      - name: Prepare database secret and DockerHub pull secret
+        shell: powershell
+        run: |
           $postgresPassword = "infrawatch-local-ci"
           $databaseUrl = "postgresql://infrawatch:$postgresPassword@infrawatch-postgres:5432/infrawatch"
           kubectl create secret generic infrawatch-secrets `

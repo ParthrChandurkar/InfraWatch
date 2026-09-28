@@ -6,6 +6,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+$env:PATH = [Environment]::GetEnvironmentVariable("PATH", "Machine") + ";" + [Environment]::GetEnvironmentVariable("PATH", "User")
 
 function Write-Info {
     param([string]$Message)
@@ -133,6 +134,11 @@ if ($CheckOnly) {
 }
 
 if ($RemoveData) {
+    if (-not (Test-CommandAvailable "terraform")) {
+        Write-Fail "terraform was not found. Terraform owns the InfraWatch namespace foundation; install Terraform or remove -RemoveData."
+        exit 1
+    }
+
     $HostPathPrefix = "/tmp/hostpath-provisioner/$Namespace/"
     $VolumeNames = @()
     $HostPaths = @()
@@ -149,9 +155,56 @@ if ($RemoveData) {
         }
     }
 
-    Write-Warn "Removing namespace '$Namespace'. This deletes InfraWatch Kubernetes resources, secrets, and local PVC data in that namespace."
-    & kubectl delete namespace $Namespace --ignore-not-found=true
-    Assert-LastCommand "Could not delete namespace '$Namespace'."
+    if ($KeepObservability) {
+        Write-Warn "-KeepObservability is ignored with -RemoveData because namespace '$Namespace' will be deleted."
+    }
+
+    $ObservabilityExists = $false
+    foreach ($Resource in @(
+        "deployment/infrawatch-prometheus",
+        "deployment/infrawatch-alertmanager",
+        "deployment/infrawatch-grafana",
+        "deployment/infrawatch-kube-state-metrics",
+        "deployment/infrawatch-alloy",
+        "deployment/infrawatch-loki-gateway",
+        "statefulset/infrawatch-loki"
+    )) {
+        if ((Invoke-NativeQuiet -Command "kubectl" -Arguments @("get", $Resource, "--namespace", $Namespace)) -eq 0) {
+            $ObservabilityExists = $true
+            break
+        }
+    }
+
+    if ($ObservabilityExists) {
+        if (-not (Test-Path -LiteralPath (Join-Path $PSScriptRoot "stop-observability.ps1"))) {
+            Write-Fail "Observability resources exist, but scripts/stop-observability.ps1 was not found. Remove observability first, then rerun -RemoveData."
+            exit 1
+        }
+
+        Write-Info "Uninstalling observability resources before Terraform namespace cleanup"
+        $PowerShellExecutable = (Get-Process -Id $PID).Path
+        & $PowerShellExecutable -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "stop-observability.ps1") -Namespace $Namespace -UninstallStack -RemoveLokiData -KeepStrictBackend
+        if ($LASTEXITCODE -ne 0) {
+            Write-Fail "Observability uninstall failed. Terraform namespace cleanup was not started, so Helm/Kustomize-owned workloads were not removed implicitly."
+            exit $LASTEXITCODE
+        }
+    }
+    else {
+        Write-Info "No observability workloads found to uninstall"
+    }
+
+    Write-Info "Deleting Kustomize-owned application resources before Terraform namespace cleanup"
+    & kubectl delete -k k8s --ignore-not-found=true
+    Assert-LastCommand "Could not delete Kustomize-owned InfraWatch resources."
+
+    & kubectl wait --for=delete pod --namespace $Namespace -l "app.kubernetes.io/part-of=infrawatch" --timeout=120s 2>$null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Warn "Some application pods may still be terminating; Terraform namespace cleanup will finish removing local InfraWatch data."
+    }
+
+    Write-Warn "Destroying Terraform-managed InfraWatch foundation after Kustomize/Helm-owned workloads were removed."
+    & terraform -chdir=terraform destroy -auto-approve "-var=kube_context=minikube"
+    Assert-LastCommand "Terraform destroy failed."
 
     & kubectl wait "--for=delete" "namespace/$Namespace" --timeout=120s 2>$null
     if ($LASTEXITCODE -ne 0) {

@@ -4,6 +4,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+$env:PATH = [Environment]::GetEnvironmentVariable("PATH", "Machine") + ";" + [Environment]::GetEnvironmentVariable("PATH", "User")
 $script:Failures = 0
 $script:Warnings = 0
 
@@ -184,7 +185,13 @@ foreach ($path in @(
     "scripts/stop-k8s.ps1",
     "scripts/start-observability.ps1",
     "scripts/stop-observability.ps1",
-    "scripts/doctor.ps1"
+    "scripts/doctor.ps1",
+    "scripts/setup.sh",
+    "scripts/health-check.sh",
+    "terraform/main.tf",
+    "terraform/variables.tf",
+    "terraform/outputs.tf",
+    "terraform/README.md"
 )) {
     if (Test-Path -LiteralPath (Join-Path $RepoRoot $path)) {
         Write-Pass "Found $path"
@@ -332,6 +339,20 @@ if (Test-CommandAvailable "kubectl") {
 }
 else {
     Write-FailCheck "kubectl is not installed"
+}
+
+if (Test-CommandAvailable "terraform") {
+    Write-Pass "Terraform is installed"
+
+    if ((Invoke-NativeQuiet -Command "terraform" -Arguments @("-chdir=terraform", "fmt", "-check")) -eq 0) {
+        Write-Pass "Terraform files are formatted"
+    }
+    else {
+        Write-FailCheck "Terraform files need formatting. Run 'terraform -chdir=terraform fmt'."
+    }
+}
+else {
+    Write-WarnCheck "Terraform is not installed. Local Kubernetes foundation setup requires Terraform."
 }
 
 $HelmCommand = Resolve-HelmCommand

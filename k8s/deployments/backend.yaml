@@ -55,6 +55,13 @@ spec:
                 secretKeyRef:
                   name: infrawatch-secrets
                   key: POSTGRES_PASSWORD
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
       containers:
         - name: backend
           image: docker.io/parthchn178/infrawatch-backend:latest
@@ -103,42 +110,3 @@ spec:
       volumes:
         - name: backend-state
           emptyDir: {}
----
-# ServiceAccount for future scoped Kubernetes API permissions.
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: infrawatch-backend
-  namespace: infrawatch
----
-# Minimal role allowing InfraWatch to manage namespace-local workloads.
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  name: infrawatch-deployer
-  namespace: infrawatch
-rules:
-  - apiGroups: [""]
-    resources: ["services", "pods"]
-    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-  - apiGroups: ["apps"]
-    resources: ["deployments"]
-    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-  - apiGroups: ["autoscaling"]
-    resources: ["horizontalpodautoscalers"]
-    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
----
-# Role binding for the backend deployment service account.
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: infrawatch-deployer
-  namespace: infrawatch
-subjects:
-  - kind: ServiceAccount
-    name: infrawatch-backend
-    namespace: infrawatch
-roleRef:
-  kind: Role
-  name: infrawatch-deployer
-  apiGroup: rbac.authorization.k8s.io

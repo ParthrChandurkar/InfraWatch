@@ -1,7 +1,0 @@
-# Namespace isolating all InfraWatch Kubernetes resources.
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: infrawatch
-  labels:
-    app.kubernetes.io/name: infrawatch
