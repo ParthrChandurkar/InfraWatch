@@ -6,16 +6,19 @@ metadata:
   namespace: infrawatch
   labels:
     app.kubernetes.io/name: infrawatch-postgres
+    app.kubernetes.io/part-of: infrawatch
 spec:
   serviceName: infrawatch-postgres
   replicas: 1
   selector:
     matchLabels:
       app.kubernetes.io/name: infrawatch-postgres
+      app.kubernetes.io/part-of: infrawatch
   template:
     metadata:
       labels:
         app.kubernetes.io/name: infrawatch-postgres
+        app.kubernetes.io/part-of: infrawatch
     spec:
       containers:
         - name: postgres
@@ -41,6 +44,8 @@ spec:
                 - pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"
             initialDelaySeconds: 10
             periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
           livenessProbe:
             exec:
               command:
@@ -49,6 +54,8 @@ spec:
                 - pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"
             initialDelaySeconds: 30
             periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
           resources:
             requests:
               cpu: 150m
@@ -62,6 +69,8 @@ spec:
   volumeClaimTemplates:
     - metadata:
         name: postgres-data
+        labels:
+          app.kubernetes.io/part-of: infrawatch
       spec:
         accessModes:
           - ReadWriteOnce

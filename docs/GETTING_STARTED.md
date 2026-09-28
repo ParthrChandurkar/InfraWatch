@@ -103,7 +103,7 @@ Fastest path:
 .\scripts\start-k8s.ps1
 ```
 
-This deploys InfraWatch into a local Minikube cluster and prints the dashboard URL.
+This deploys InfraWatch into a local Minikube cluster and prints the dashboard URL. The script uses a 3072 MB Minikube default so it works on Docker Desktop installs with limited memory.
 
 What is real in this mode:
 
@@ -115,7 +115,28 @@ What still uses fallback data by default:
 
 - metrics/log responses, until Prometheus, Loki, and Grafana Alloy are installed.
 
-If you have already installed the observability stack and want strict Prometheus/Loki behavior:
+Install the observability stack:
+
+```powershell
+.\scripts\start-observability.ps1
+```
+
+This installs a lightweight local observability stack into Minikube: Prometheus, Grafana, Alertmanager, and kube-state-metrics as plain Kubernetes manifests, plus Loki and Grafana Alloy through Helm. It also switches the backend to strict Prometheus/Loki mode unless you pass:
+
+```powershell
+.\scripts\start-observability.ps1 -KeepFallback
+```
+
+After it finishes, open:
+
+| Tool | URL |
+|---|---|
+| Grafana | http://localhost:3001 |
+| Prometheus | http://localhost:9090 |
+| Alertmanager | http://localhost:9093 |
+| Loki | http://localhost:3100 |
+
+If you have already installed the observability stack separately and want strict Prometheus/Loki behavior:
 
 ```powershell
 .\scripts\start-k8s.ps1 -StrictObservability

@@ -1,10 +1,19 @@
 # Helm values for kube-prometheus-stack in the InfraWatch namespace.
 fullnameOverride: infrawatch-kube-prometheus
 
+defaultRules:
+  create: false
+
 grafana:
   enabled: true
-  defaultDashboardsEnabled: true
+  defaultDashboardsEnabled: false
   adminUser: admin
+  additionalDataSources:
+    - name: Loki
+      type: loki
+      access: proxy
+      url: http://infrawatch-loki-gateway
+      isDefault: false
   sidecar:
     dashboards:
       enabled: true
@@ -13,24 +22,34 @@ grafana:
     type: ClusterIP
   resources:
     requests:
-      cpu: 100m
-      memory: 256Mi
+      cpu: 50m
+      memory: 128Mi
     limits:
-      cpu: 500m
-      memory: 768Mi
+      cpu: 300m
+      memory: 512Mi
+
+prometheusOperator:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 250m
+      memory: 384Mi
 
 prometheus:
   service:
     type: ClusterIP
   prometheusSpec:
-    retention: 7d
+    retention: 2d
+    scrapeInterval: 30s
     resources:
       requests:
-        cpu: 250m
-        memory: 512Mi
+        cpu: 150m
+        memory: 384Mi
       limits:
-        cpu: "1"
-        memory: 2Gi
+        cpu: 700m
+        memory: 1Gi
     additionalScrapeConfigs:
       - job_name: infrawatch-backend
         metrics_path: /internal/metrics
@@ -109,6 +128,21 @@ prometheus-node-exporter:
     limits:
       cpu: 200m
       memory: 128Mi
+
+kubeApiServer:
+  enabled: false
+
+kubeControllerManager:
+  enabled: false
+
+kubeScheduler:
+  enabled: false
+
+kubeProxy:
+  enabled: false
+
+kubeEtcd:
+  enabled: false
 
 additionalPrometheusRulesMap:
   infrawatch-rules:

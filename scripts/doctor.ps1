@@ -30,6 +30,40 @@ function Test-CommandAvailable {
     return $null -ne (Get-Command $Name -ErrorAction SilentlyContinue)
 }
 
+function Resolve-HelmCommand {
+    $helmCommand = Get-Command helm -ErrorAction SilentlyContinue
+    if ($helmCommand) {
+        return $helmCommand.Source
+    }
+
+    $candidatePaths = @(
+        (Join-Path $env:LOCALAPPDATA "Microsoft\WinGet\Links\helm.exe"),
+        "C:\ProgramData\chocolatey\bin\helm.exe"
+    )
+
+    foreach ($path in $candidatePaths) {
+        if ($path -and (Test-Path -LiteralPath $path)) {
+            return $path
+        }
+    }
+
+    $wingetPackagesPath = Join-Path $env:LOCALAPPDATA "Microsoft\WinGet\Packages"
+    if (Test-Path -LiteralPath $wingetPackagesPath) {
+        $wingetHelm = Get-ChildItem -Path $wingetPackagesPath -Directory -Filter "Helm.Helm_*" -ErrorAction SilentlyContinue |
+            ForEach-Object {
+                Join-Path $_.FullName "windows-amd64\helm.exe"
+            } |
+            Where-Object { Test-Path -LiteralPath $_ } |
+            Select-Object -First 1
+
+        if ($wingetHelm) {
+            return $wingetHelm
+        }
+    }
+
+    return ""
+}
+
 function Invoke-NativeQuiet {
     param(
         [string]$Command,
@@ -148,6 +182,7 @@ foreach ($path in @(
     "scripts/stop-local.ps1",
     "scripts/start-k8s.ps1",
     "scripts/stop-k8s.ps1",
+    "scripts/start-observability.ps1",
     "scripts/doctor.ps1"
 )) {
     if (Test-Path -LiteralPath (Join-Path $RepoRoot $path)) {
@@ -170,6 +205,8 @@ $FrontendPort = Get-EnvValue -Values $EnvValues -Name "FRONTEND_PORT" -Default "
 $BackendPort = Get-EnvValue -Values $EnvValues -Name "BACKEND_PORT" -Default "8000"
 $PrometheusPort = Get-EnvValue -Values $EnvValues -Name "PROMETHEUS_PORT" -Default "9090"
 $GrafanaPort = Get-EnvValue -Values $EnvValues -Name "GRAFANA_PORT" -Default "3001"
+$LokiPort = Get-EnvValue -Values $EnvValues -Name "LOKI_PORT" -Default "3100"
+$AlertmanagerPort = Get-EnvValue -Values $EnvValues -Name "ALERTMANAGER_PORT" -Default "9093"
 
 if (Test-CommandAvailable "docker") {
     Write-Pass "Docker CLI is installed"
@@ -260,6 +297,29 @@ if (Test-CommandAvailable "kubectl") {
             else {
                 Write-WarnCheck "Kubernetes frontend service was not found"
             }
+
+            $observabilityServices = @(
+                @{ Name = "Grafana"; Resource = "svc/infrawatch-grafana" },
+                @{ Name = "Prometheus"; Resource = "svc/infrawatch-prometheus" },
+                @{ Name = "Alertmanager"; Resource = "svc/infrawatch-alertmanager" },
+                @{ Name = "Loki"; Resource = "svc/infrawatch-loki-gateway" }
+            )
+
+            foreach ($service in $observabilityServices) {
+                if ((Invoke-NativeQuiet -Command "kubectl" -Arguments @("get", $service.Resource, "--namespace", $Namespace)) -eq 0) {
+                    Write-Pass "$($service.Name) Kubernetes service exists"
+                }
+                else {
+                    Write-WarnCheck "$($service.Name) Kubernetes service was not found. Run .\scripts\start-observability.ps1."
+                }
+            }
+
+            if ((Invoke-NativeQuiet -Command "kubectl" -Arguments @("get", "deployment", "infrawatch-alloy", "--namespace", $Namespace)) -eq 0) {
+                Write-Pass "Grafana Alloy deployment exists"
+            }
+            else {
+                Write-WarnCheck "Grafana Alloy deployment was not found. Run .\scripts\start-observability.ps1."
+            }
         }
         else {
             Write-WarnCheck "Namespace '$Namespace' does not exist yet. Run .\scripts\start-k8s.ps1."
@@ -271,6 +331,35 @@ if (Test-CommandAvailable "kubectl") {
 }
 else {
     Write-FailCheck "kubectl is not installed"
+}
+
+$HelmCommand = Resolve-HelmCommand
+if (-not [string]::IsNullOrWhiteSpace($HelmCommand)) {
+    Write-Pass "Helm is installed"
+
+    if ((Invoke-NativeQuiet -Command $HelmCommand -Arguments @("status", "infrawatch", "--namespace", $Namespace)) -eq 0) {
+        Write-WarnCheck "Legacy kube-prometheus-stack Helm release exists. The current local profile uses lightweight manifests instead."
+    }
+    else {
+        Write-Pass "Legacy kube-prometheus-stack Helm release is absent"
+    }
+
+    if ((Invoke-NativeQuiet -Command $HelmCommand -Arguments @("status", "infrawatch-loki", "--namespace", $Namespace)) -eq 0) {
+        Write-Pass "Loki Helm release exists"
+    }
+    else {
+        Write-WarnCheck "Loki Helm release was not found"
+    }
+
+    if ((Invoke-NativeQuiet -Command $HelmCommand -Arguments @("status", "infrawatch-alloy", "--namespace", $Namespace)) -eq 0) {
+        Write-Pass "Grafana Alloy Helm release exists"
+    }
+    else {
+        Write-WarnCheck "Grafana Alloy Helm release was not found"
+    }
+}
+else {
+    Write-WarnCheck "Helm is not installed. Kubernetes observability setup requires Helm."
 }
 
 if (Test-CommandAvailable "minikube") {
@@ -289,8 +378,10 @@ else {
 
 Test-HttpEndpoint -Name "InfraWatch dashboard" -Url "http://localhost:$FrontendPort"
 Test-HttpEndpoint -Name "FastAPI docs" -Url "http://localhost:$BackendPort/docs"
-Test-HttpEndpoint -Name "Prometheus" -Url "http://localhost:$PrometheusPort"
-Test-HttpEndpoint -Name "Grafana" -Url "http://localhost:$GrafanaPort"
+Test-HttpEndpoint -Name "Prometheus" -Url "http://localhost:$PrometheusPort/-/ready"
+Test-HttpEndpoint -Name "Grafana" -Url "http://localhost:$GrafanaPort/api/health"
+Test-HttpEndpoint -Name "Loki" -Url "http://localhost:$LokiPort/loki/api/v1/status/buildinfo"
+Test-HttpEndpoint -Name "Alertmanager" -Url "http://localhost:$AlertmanagerPort/-/ready"
 
 Write-Host ""
 if ($script:Failures -gt 0) {

@@ -206,7 +206,7 @@ kubectl rollout restart deployment/infrawatch-backend -n infrawatch
 First command:
 
 ```bash
-kubectl port-forward -n infrawatch svc/infrawatch-kube-prometheus-prometheus 9090:9090
+kubectl port-forward -n infrawatch svc/infrawatch-prometheus 9090:9090
 ```
 
 Open:

@@ -98,7 +98,7 @@ In Demo Mode, Kubernetes, Prometheus, and Loki calls are replaced by safe simula
 | Local Kubernetes | Minikube-compatible Kubernetes manifests |
 | Observability | Prometheus, Grafana, Loki, Grafana Alloy, Alertmanager |
 | Automation | GitHub Actions, DockerHub image publishing |
-| Infra setup | Terraform and Helm values for observability components |
+| Infra setup | PowerShell scripts, Kubernetes manifests, and Helm values for local observability |
 
 ---
 
@@ -108,7 +108,7 @@ In Demo Mode, Kubernetes, Prometheus, and Loki calls are replaced by safe simula
 backend/                  FastAPI API, deployment logic, observability clients
 frontend/                 React dashboard served by Nginx
 k8s/                      Kubernetes namespace, services, deployments, HPA examples
-terraform/                Helm-based monitoring/logging setup
+terraform/                Optional experimental infra notes
 monitoring/               Prometheus, Grafana, and Alertmanager config
 logging/                  Loki and Grafana Alloy config
 docs/                     Getting started, architecture, and troubleshooting guides
@@ -143,7 +143,6 @@ For Kubernetes mode:
 - kubectl
 - Minikube or another reachable Kubernetes cluster
 - Helm 3
-- Terraform 1.6+
 - DockerHub or another image registry
 
 ---
@@ -376,7 +375,7 @@ Fastest Minikube path:
 .\scripts\start-k8s.ps1
 ```
 
-This checks Docker, `kubectl`, and Minikube, starts Minikube if needed, enables `metrics-server`, creates the `infrawatch` namespace and PostgreSQL secret, applies the Kubernetes manifests, waits for rollouts, and prints the dashboard URL.
+This checks Docker, `kubectl`, and Minikube, starts Minikube if needed, enables `metrics-server`, creates the `infrawatch` namespace and PostgreSQL secret, applies the Kubernetes manifests, waits for rollouts, and prints the dashboard URL. The default Minikube memory target is 3072 MB so it fits Docker Desktop setups with limited memory.
 
 The default script uses these public DockerHub images:
 
@@ -400,6 +399,40 @@ For strict real observability only:
 ```
 
 Use strict mode only after installing the monitoring/logging stack.
+
+Install the lightweight Kubernetes observability stack:
+
+```powershell
+.\scripts\start-observability.ps1
+```
+
+This installs or updates a laptop-friendly local stack:
+
+- Prometheus, Grafana, Alertmanager, and kube-state-metrics from plain Kubernetes manifests;
+- Loki from the Grafana Loki Helm chart with heavy caches disabled;
+- Grafana Alloy from the Grafana Alloy Helm chart.
+
+By default, it also switches the backend from fallback observability to real Prometheus/Loki mode and starts local port-forwards:
+
+| Tool | Local URL |
+|---|---|
+| Grafana | http://localhost:3001 |
+| Prometheus | http://localhost:9090 |
+| Alertmanager | http://localhost:9093 |
+| Loki | http://localhost:3100 |
+
+Grafana login:
+
+```text
+Username: admin
+Password: value from GRAFANA_ADMIN_PASSWORD in .env, or infrawatch-local-admin if unset
+```
+
+To install the stack but keep fallback metrics/logs enabled:
+
+```powershell
+.\scripts\start-observability.ps1 -KeepFallback
+```
 
 To pause Kubernetes workloads while preserving namespace, secrets, and data:
 
@@ -452,7 +485,7 @@ Open the frontend:
 minikube service infrawatch-frontend --namespace infrawatch
 ```
 
-Install observability with Terraform/Helm:
+Alternative Terraform/Helm path:
 
 ```powershell
 cd terraform

@@ -1,6 +1,8 @@
 param(
     [string]$ImageRepository = "parthchn178",
     [string]$PostgresPassword = "",
+    [int]$MinikubeMemoryMB = 3072,
+    [int]$MinikubeCpus = 2,
     [switch]$StrictObservability,
     [switch]$CheckOnly
 )
@@ -113,10 +115,11 @@ if ($CheckOnly) {
     exit 0
 }
 
-Write-Info "Starting Minikube if it is not already running"
-$MinikubeStatus = (& minikube status "--format={{.Host}}" 2>$null | Select-Object -First 1)
-if ($LASTEXITCODE -ne 0 -or $MinikubeStatus -ne "Running") {
-    & minikube start
+Write-Info "Starting Minikube if it is not fully running"
+$MinikubeHostStatus = (& minikube status "--format={{.Host}}" 2>$null | Select-Object -First 1)
+$MinikubeApiStatus = (& minikube status "--format={{.APIServer}}" 2>$null | Select-Object -First 1)
+if ($LASTEXITCODE -ne 0 -or $MinikubeHostStatus -ne "Running" -or $MinikubeApiStatus -ne "Running") {
+    & minikube start "--memory=$MinikubeMemoryMB" "--cpus=$MinikubeCpus"
     Assert-LastCommand "Minikube failed to start."
 }
 else {
