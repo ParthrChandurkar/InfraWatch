@@ -1,692 +1,110 @@
-# 🚀 InfraWatch
+# InfraWatch
 
-**Local K8s deployment and observability platform for lightweight applications.**
+InfraWatch is a local-first deployment and observability project for running a sample application stack with Docker Compose or Minikube. It combines a React dashboard, FastAPI backend, Kubernetes resources, Terraform-based namespace setup, Helm-managed monitoring, and Redis-backed caching.
 
-InfraWatch helps developers test containerized apps on a local Kubernetes cluster and view deployment health, logs, metrics, and rollout activity from one simple dashboard.
+## Features
 
-Think of it as **CloudWatch-style visibility for local Kubernetes labs** — useful for learning, testing, demos, and validating small services before moving to real cloud infrastructure.
+- React dashboard for deployment and infrastructure views
+- FastAPI endpoints for cluster, workload, and deployment operations
+- Docker Compose development stack
+- Minikube-oriented Kubernetes manifests and Kustomize configuration
+- Terraform configuration for the Kubernetes foundation
+- Helm scripts for Prometheus, Grafana, and Alertmanager
+- PostgreSQL persistence and Redis caching
+- Failure-demonstration manifests for common Kubernetes workload states
+- GitHub Actions checks for code, tests, builds, images, and optional deployment
 
-> InfraWatch is local-first. Browser Demo Mode is simulated and does not run a real Kubernetes cluster.
+## Architecture
 
----
+The browser calls the FastAPI backend. The backend reads and changes resources in the connected Kubernetes cluster and uses PostgreSQL and Redis for application data and caching. Prometheus collects metrics; Grafana visualizes them; Alertmanager handles configured alerts. Docker Compose provides a local application stack, while Minikube exercises the Kubernetes path.
 
-## ✨ What InfraWatch Does
+See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for component boundaries and request flows.
 
-- 🚀 Deploy or update an already-built container image.
-- ☸️ Generate and apply Kubernetes `Deployment` and `Service` manifests.
-- ✅ Check rollout status and ready/available replicas.
-- 🔁 Roll back a managed Kubernetes deployment.
-- 📊 Show CPU, memory, request-rate, and error-rate charts.
-- 📜 Show recent service logs.
-- 🧾 Keep an audit trail for deployment and delete actions.
-- 🐘 Store state in PostgreSQL when configured.
-- 🧪 Provide safe demo/mock data when no real cluster metrics exist.
-- 🔁 Use GitHub Actions for optional Docker image publishing and deployment automation.
+## Tech Stack
 
----
-
-## 🎯 Project Direction
-
-InfraWatch is being shaped as:
-
-```text
-Local app image → Local Kubernetes → InfraWatch dashboard → health, logs, metrics, rollback
-```
-
-The goal is simple:
-
-> Help developers run and observe lightweight applications locally before paying for or depending on AWS, Azure, or GCP.
-
-Good use cases:
-
-- 🧑‍💻 Learning Kubernetes with a real dashboard.
-- 🧪 Testing small services before cloud deployment.
-- 🔍 Checking pod health, service status, logs, and metrics locally.
-- 🎓 Showing SRE/DevOps concepts in a portfolio project.
-- 💸 Practicing infrastructure workflows without cloud cost.
-
-InfraWatch is currently best for lightweight apps that already have a container image or can be containerized with Docker.
-
-New users should start with [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md).
-
----
-
-## ✅ What Is Real vs Demo
-
-| Feature | Docker Compose Local | Local Kubernetes / Minikube | Browser Demo Mode |
-|---|---:|---:|---:|
-| React dashboard | ✅ Real | ✅ Real | ✅ Real |
-| FastAPI backend | ✅ Real | ✅ Real | ✅ Real |
-| PostgreSQL state | ✅ Real | ✅ Real when configured | ❌ Uses sample/browser state |
-| Kubernetes workload creation | 🧪 Off by default | ✅ Real when enabled | ❌ Simulated |
-| Metrics and logs | 🧪 Mock fallback unless data exists | ✅ Prometheus/Loki when configured | 🧪 Simulated |
-| Grafana dashboards | ✅ Local | ✅ Local/cluster setup | ❌ Not included |
-| GitHub Actions CI/CD | ✅ Optional | ✅ Optional | ❌ Not automatic |
-
-Demo Mode keeps the dashboard interactive without asking visitors to install Kubernetes. It is useful for screenshots, portfolio review, and quick UI exploration.
-
----
-
-## 🧱 Architecture
-
-```mermaid
-flowchart LR
-    User[Developer] --> UI[React Dashboard]
-    UI --> API[FastAPI Control Plane]
-    API --> Store[(PostgreSQL or JSON State)]
-    API --> Kube[kubectl / Kubernetes API]
-    Kube --> Apps[Local App Workloads]
-    Apps --> Prom[Prometheus]
-    Apps --> Loki[Loki]
-    Prom --> API
-    Loki --> API
-    Prom --> Grafana[Grafana]
-```
-
-In Demo Mode, Kubernetes, Prometheus, and Loki calls are replaced by safe simulated responses.
-
----
-
-## 🧰 Tech Stack
-
-| Area | Tools |
-|---|---|
-| Frontend | React, Vite, TypeScript, Nginx |
-| Backend | Python, FastAPI, Pydantic |
-| State | PostgreSQL, JSON fallback |
+| Area | Technologies |
+| --- | --- |
+| Frontend | React, TypeScript, Vite |
+| Backend | Python, FastAPI |
+| Data | PostgreSQL, Redis |
 | Containers | Docker, Docker Compose |
-| Local Kubernetes | Minikube-compatible Kubernetes manifests |
-| Observability | Prometheus, Grafana, Loki, Grafana Alloy, Alertmanager |
-| Automation | GitHub Actions, DockerHub image publishing |
-| Infra setup | PowerShell scripts, Kubernetes manifests, and Helm values for local observability |
+| Orchestration | Kubernetes, Minikube, Kustomize, Helm |
+| Infrastructure | Terraform |
+| Observability | Prometheus, Grafana, Alertmanager |
+| Automation | GitHub Actions |
 
----
+## Local Docker Stack
 
-## 📁 Project Structure
-
-```text
-backend/                  FastAPI API, deployment logic, observability clients
-frontend/                 React dashboard served by Nginx
-k8s/                      Kubernetes namespace, services, deployments, HPA examples
-terraform/                Optional experimental infra notes
-monitoring/               Prometheus, Grafana, and Alertmanager config
-logging/                  Loki and Grafana Alloy config
-docs/                     Getting started, architecture, and troubleshooting guides
-scripts/                  Utility scripts
-.github/workflows/        CI/CD pipeline
-docker-compose.yml        Local full-stack runtime
-```
-
-Dockerfiles are service-specific:
-
-- `backend/Dockerfile`
-- `frontend/Dockerfile`
-
-There is no root `Dockerfile` because InfraWatch runs multiple services.
-
----
-
-## ⚙️ Prerequisites
-
-For the easiest local run:
-
-- Git
-- Docker Desktop
-
-For source development:
-
-- Python 3.12+
-- Node.js 22+
-
-For Kubernetes mode:
-
-- kubectl
-- Minikube or another reachable Kubernetes cluster
-- Helm 3
-- DockerHub or another image registry
-
----
-
-## 🐳 Run the Full Local Stack
-
-From the project root:
+Prerequisites: Docker with the Compose plugin.
 
 ```powershell
-.\scripts\start-local.ps1
+Copy-Item .env.example .env
+docker compose up --build -d
+docker compose ps
 ```
 
-This checks Docker, creates `.env` from `.env.example` if needed, validates Docker Compose, starts the full local stack, and prints every local dashboard URL.
+Refer to [`docs/GETTING_STARTED.md`](docs/GETTING_STARTED.md) for the current service addresses and validation flow. Stop the stack with `docker compose down`.
 
-To start in the background:
+## Local Kubernetes Deployment
 
-```powershell
-.\scripts\start-local.ps1 -Detached
-```
+Prerequisites: Docker, Minikube, `kubectl`, Terraform, and Helm.
 
-To check prerequisites and print URLs without starting containers:
-
-```powershell
-.\scripts\start-local.ps1 -CheckOnly
-```
-
-The script starts:
-
-- InfraWatch React dashboard
-- FastAPI backend
-- PostgreSQL
-- Prometheus
-- Grafana
-- Loki
-- Grafana Alloy
-- Alertmanager
-
-Manual setup is also supported:
-
-```powershell
-copy .env.example .env
-```
-
-Edit `.env` and set local passwords:
-
-```text
-POSTGRES_PASSWORD=your-local-password
-GRAFANA_ADMIN_PASSWORD=your-local-password
-```
-
-Start the stack:
-
-```powershell
-docker compose up --build
-```
-
-Open:
-
-| Service | URL |
-|---|---|
-| 🚀 InfraWatch dashboard | http://localhost:3000 |
-| 🧩 FastAPI docs | http://localhost:8000/docs |
-| 📈 Prometheus | http://localhost:9090 |
-| 📊 Grafana | http://localhost:3001 |
-| 📜 Loki | http://localhost:3100 |
-| 🔎 Grafana Alloy | http://localhost:12345 |
-| 🚨 Alertmanager | http://localhost:9093 |
-
-Grafana login:
-
-```text
-Username: admin
-Password: value from GRAFANA_ADMIN_PASSWORD in .env
-```
-
-Stop the stack:
-
-```powershell
-.\scripts\stop-local.ps1
-```
-
-Stop and remove local volumes:
-
-```powershell
-.\scripts\stop-local.ps1 -Volumes
-```
-
----
-
-## 🩺 Check Your Local Setup
-
-Run the doctor script when something does not start or when you want to confirm your machine is ready:
-
-```powershell
-.\scripts\doctor.ps1
-```
-
-It checks:
-
-- required InfraWatch files
-- `.env` presence
-- Docker and Docker Compose
-- running InfraWatch containers
-- `kubectl`, Kustomize rendering, and current context
-- Minikube status
-- Kubernetes namespace, pods, and services when a cluster is reachable
-- local dashboard/API/Grafana/Prometheus URLs
-
-The script does not change local infrastructure. It reports clear `PASS`, `WARN`, and `FAIL` lines.
-
----
-
-## 🔌 If Ports Are Already Used
-
-If another project already uses `3000`, `8000`, or `5432`, set alternate ports in `.env`:
-
-```text
-FRONTEND_PORT=13000
-BACKEND_PORT=18000
-POSTGRES_PORT=15432
-PROMETHEUS_PORT=19090
-GRAFANA_PORT=13001
-LOKI_PORT=13100
-ALLOY_PORT=12345
-ALERTMANAGER_PORT=19093
-```
-
-Then run:
-
-```powershell
-docker compose up --build
-```
-
-With the values above, open:
-
-- Dashboard: http://localhost:13000
-- API docs: http://localhost:18000/docs
-- Prometheus: http://localhost:19090
-- Grafana: http://localhost:13001
-- Grafana Alloy: http://localhost:12345
-
----
-
-## 🖥️ Main Local Interfaces
-
-InfraWatch has one main application dashboard and a few supporting observability tools.
-
-| Interface | Default URL | Alternate URL example |
-|---|---|---|
-| 🚀 InfraWatch app | http://localhost:3000 | http://localhost:13000 |
-| 🧩 FastAPI docs | http://localhost:8000/docs | http://localhost:18000/docs |
-| 📈 Prometheus | http://localhost:9090 | http://localhost:19090 |
-| 📊 Grafana | http://localhost:3001 | http://localhost:13001 |
-| 🔎 Grafana Alloy | http://localhost:12345 | http://localhost:12345 |
-| 🚨 Alertmanager | http://localhost:9093 | http://localhost:19093 |
-
-Grafana uses the credentials from your local `.env` file.
-
----
-
-## 🧪 Demo Mode and Mock Data
-
-Demo Mode exists so InfraWatch remains usable without a Kubernetes cluster.
-
-In Demo Mode:
-
-- Deploy actions validate input and create Kubernetes-style records.
-- No real workload is created.
-- Metrics and logs use realistic sample data.
-- Audit events are still recorded.
-- The UI clearly shows a **Demo Mode** banner.
-
-The Docker Compose stack enables safe fallback data by default:
-
-```text
-INFRAWATCH_ALLOW_MOCK_OBSERVABILITY=true
-INFRAWATCH_EXECUTE_KUBECTL=false
-```
-
-For strict real observability, set:
-
-```text
-INFRAWATCH_ALLOW_MOCK_OBSERVABILITY=false
-```
-
-If Prometheus or Loki has no data in strict mode, the API returns an error instead of hiding it with fake data.
-
----
-
-## 💻 Run Backend and Frontend Without Docker
-
-Install backend dependencies:
-
-```powershell
-python -m venv .venv
-.\.venv\Scripts\activate
-python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
-```
-
-Start backend:
-
-```powershell
-cd backend
-..\.venv\Scripts\python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
-```
-
-Start frontend in another terminal:
-
-```powershell
-cd frontend
-npm ci
-npm run dev
-```
-
-Open:
-
-- Frontend: http://localhost:5173
-- Backend docs: http://localhost:8000/docs
-
----
-
-## ☸️ Run Local Kubernetes Mode
-
-Kubernetes mode is the real local deployment path. It requires an active cluster.
-
-Fastest Minikube path:
-
-```powershell
-.\scripts\start-k8s.ps1
-```
-
-This checks Docker, `kubectl`, and Minikube, starts Minikube if needed, enables `metrics-server`, creates the `infrawatch` namespace and PostgreSQL secret, applies the Kubernetes manifests, waits for rollouts, and prints the dashboard URL. The default Minikube memory target is 3072 MB so it fits Docker Desktop setups with limited memory.
-
-The default script uses these public DockerHub images:
-
-```text
-docker.io/parthchn178/infrawatch-backend:latest
-docker.io/parthchn178/infrawatch-frontend:latest
-```
-
-If you fork the project and publish images under your own DockerHub account, run:
-
-```powershell
-.\scripts\start-k8s.ps1 -ImageRepository your-dockerhub-username
-```
-
-By default, the script keeps mock observability fallback enabled in Kubernetes mode. That means deployments are real, but metrics/logs stay usable even before Prometheus, Loki, and Alloy are installed.
-
-For strict real observability only:
-
-```powershell
-.\scripts\start-k8s.ps1 -StrictObservability
-```
-
-Use strict mode only after installing the monitoring/logging stack.
-
-Install the lightweight Kubernetes observability stack:
-
-```powershell
-.\scripts\start-observability.ps1
-```
-
-This installs or updates a laptop-friendly local stack:
-
-- Prometheus, Grafana, Alertmanager, and kube-state-metrics from plain Kubernetes manifests;
-- Loki from the Grafana Loki Helm chart with heavy caches disabled;
-- Grafana Alloy from the Grafana Alloy Helm chart.
-
-By default, it also switches the backend from fallback observability to real Prometheus/Loki mode and starts local port-forwards:
-
-| Tool | Local URL |
-|---|---|
-| Grafana | http://localhost:3001 |
-| Prometheus | http://localhost:9090 |
-| Alertmanager | http://localhost:9093 |
-| Loki | http://localhost:3100 |
-
-Grafana login:
-
-```text
-Username: admin
-Password: value from GRAFANA_ADMIN_PASSWORD in .env, or infrawatch-local-admin if unset
-```
-
-To install the stack but keep fallback metrics/logs enabled:
-
-```powershell
-.\scripts\start-observability.ps1 -KeepFallback
-```
-
-To pause only the observability stack and stop its local port-forwards:
-
-```powershell
-.\scripts\stop-observability.ps1
-```
-
-To fully uninstall the local observability stack:
-
-```powershell
-.\scripts\stop-observability.ps1 -UninstallStack
-```
-
-To pause Kubernetes workloads while preserving namespace, secrets, and data:
-
-```powershell
-.\scripts\stop-k8s.ps1
-```
-
-By default, `stop-k8s.ps1` also pauses observability workloads to save laptop resources. If you want observability to keep running:
-
-```powershell
-.\scripts\stop-k8s.ps1 -KeepObservability
-```
-
-To remove the InfraWatch namespace and local Kubernetes data:
-
-```powershell
-.\scripts\stop-k8s.ps1 -RemoveData
-```
-
-To also stop Minikube:
-
-```powershell
-.\scripts\stop-k8s.ps1 -StopMinikube
-```
-
-Manual Kubernetes path:
-
-Start Minikube:
+The repository includes helper scripts under `scripts/` as well as a manual path. The core manual flow is:
 
 ```powershell
 minikube start
 minikube addons enable metrics-server
-```
 
-Create namespace and secrets:
+Set-Location terraform
+terraform init
+terraform validate
+terraform apply -var="kube_context=minikube"
+Set-Location ..
 
-```powershell
-kubectl apply -f k8s/namespace.yaml
-kubectl create secret generic infrawatch-secrets `
-  --namespace infrawatch `
-  --from-literal=POSTGRES_PASSWORD=use-a-strong-password `
-  --from-literal=DATABASE_URL=postgresql://infrawatch:use-a-strong-password@infrawatch-postgres:5432/infrawatch
-```
-
-Deploy InfraWatch:
-
-```powershell
+kubectl create secret generic infrawatch-secrets --namespace infrawatch --from-literal=POSTGRES_PASSWORD=replace-me --from-literal=DATABASE_URL=postgresql://infrawatch:replace-me@infrawatch-postgres:5432/infrawatch
 kubectl apply -k k8s
 kubectl rollout status deployment/infrawatch-backend --namespace infrawatch --timeout=180s
 kubectl rollout status deployment/infrawatch-frontend --namespace infrawatch --timeout=180s
-```
-
-Open the frontend:
-
-```powershell
 minikube service infrawatch-frontend --namespace infrawatch
 ```
 
-Alternative Terraform/Helm path:
+Use a strong local password and do not commit generated Secret manifests. Monitoring installation details are documented in the repository scripts and monitoring configuration.
 
-```powershell
-cd terraform
-terraform init
-terraform apply -var="grafana_admin_password=replace-with-a-strong-password"
-```
-
-Then restart strict Kubernetes mode if you want the backend to fail loudly when Prometheus/Loki are unavailable:
-
-```powershell
-.\scripts\start-k8s.ps1 -StrictObservability
-```
-
----
-
-## 🔁 GitHub Actions CI/CD
-
-Workflow file:
-
-```text
-.github/workflows/ci-cd.yml
-```
-
-On push or pull request, it runs:
-
-- ✅ Backend dependency install
-- ✅ Ruff lint
-- ✅ Backend tests
-- ✅ Frontend dependency install
-- ✅ ESLint
-- ✅ Frontend production build
-- ✅ Backend Docker image build
-- ✅ Frontend Docker image build
-
-On push to `main`, it can also publish and deploy, but only if these GitHub repository secrets exist:
-
-```text
-DOCKERHUB_USERNAME
-DOCKERHUB_TOKEN
-KUBE_CONFIG_B64
-```
-
-Important:
-
-- `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` are required to publish images.
-- `KUBE_CONFIG_B64` must point to a reachable Kubernetes cluster.
-- A laptop-only Minikube cluster is not reachable from GitHub-hosted runners by default.
-- If DockerHub secrets exist but `KUBE_CONFIG_B64` is missing, the workflow still publishes Docker images and clearly skips Kubernetes rollout.
-
-Optional local Minikube deployment:
-
-- Register a self-hosted GitHub Actions runner on your machine with the custom label `local-k8s`.
-- Keep Docker Desktop and Minikube running.
-- Add this repository variable only when the runner is online:
-
-```text
-INFRAWATCH_DEPLOY_TARGET=local-minikube
-```
-
-With that variable enabled, the workflow publishes DockerHub images first, then deploys those images to your local Minikube cluster through the self-hosted runner.
-
----
-
-## 🧭 Main API Endpoints
-
-| Method | Endpoint | Purpose |
-|---|---|---|
-| `GET` | `/healthz` | Health and active mode summary |
-| `POST` | `/deploy` | Create/update a deployment record or Kubernetes workload |
-| `GET` | `/deployments` | List known deployments |
-| `DELETE` | `/deployment/{name}` | Delete a deployment |
-| `POST` | `/deployment/{name}/rollback` | Roll back a Kubernetes deployment |
-| `GET` | `/metrics/{service}` | Read service metrics |
-| `GET` | `/logs/{service}` | Read service logs |
-| `GET` | `/audit-logs` | Read recent deployment/audit events |
-| `GET` | `/metrics` | Prometheus scrape endpoint |
-| `GET` | `/internal/metrics` | Alternate Prometheus scrape endpoint |
-
-Example deploy request:
-
-```powershell
-Invoke-RestMethod `
-  -Uri "http://localhost:8000/deploy" `
-  -Method Post `
-  -ContentType "application/json" `
-  -Body '{"name":"catalog-api","image":"docker.io/example/catalog-api:latest","replicas":2,"port":8080}'
-```
-
----
-
-## 🧪 Validate the Project
+## Verification
 
 Backend:
 
 ```powershell
-cd backend
-..\.venv\Scripts\python -m ruff check app tests
-..\.venv\Scripts\python -m pytest
+Set-Location backend
+python -m ruff check app tests
+python -m pytest
 ```
 
 Frontend:
 
 ```powershell
-cd frontend
+Set-Location frontend
 npm ci
 npm run lint
 npm run build
 ```
 
-Docker Compose config:
+Infrastructure configuration:
 
 ```powershell
 docker compose config --quiet
-```
-
-Kubernetes manifest output:
-
-```powershell
 kubectl kustomize k8s
+terraform -chdir=terraform validate
 ```
 
----
+## CI/CD
 
-## 🛠️ Troubleshooting
+`.github/workflows/ci-cd.yml` verifies backend and frontend code and builds container images. Publishing and cluster rollout require configured registry and Kubernetes credentials. A GitHub-hosted runner cannot directly reach a laptop-only Minikube cluster; the repository documents an optional self-hosted runner path for that case.
 
-| Problem | Check |
-|---|---|
-| Docker stack does not start | Open Docker Desktop and run `docker compose ps` |
-| Port already allocated | Set alternate ports in `.env` |
-| Dashboard loads but API fails | Confirm backend health at `/healthz` |
-| Charts show simulated telemetry | Expected when no real Prometheus/Loki workload data exists |
-| Deployments do not create real pods | Set `INFRAWATCH_EXECUTE_KUBECTL=true` in a valid Kubernetes environment |
-| GitHub Actions publish fails | Add `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` secrets |
-| GitHub Actions deploy fails | Add `KUBE_CONFIG_B64` for a reachable cluster |
+## Limitations
 
-More operational troubleshooting is in:
+- InfraWatch is designed for local development and demonstration, not as a hosted multi-tenant control plane.
+- User authentication, multi-tenant authorization, TLS ingress, and arbitrary Git repository onboarding are not implemented.
+- The UI deploys an existing container image; it does not build arbitrary user repositories.
+- Local Minikube availability and resource capacity depend on the host machine.
 
-- `docs/ARCHITECTURE.md`
-- `docs/TROUBLESHOOTING.md`
-
----
-
-## 🚧 In Progress
-
-InfraWatch is being improved to become easier for everyone to use as an open-source local Kubernetes tool.
-
-Current focus:
-
-> Making InfraWatch available for everyone who wants a simple local K8s deployment and observability setup.
-
-Planned improvements:
-
-- 🧩 Simple app onboarding form.
-- 🐳 Better Docker image guidance for new users.
-- ☸️ Easier Minikube/kind setup instructions.
-- 📊 Cleaner default Grafana dashboards.
-- 🔐 Safer secret setup documentation.
-- 🔁 Optional GitHub repo workflow generation in a future version.
-
----
-
-## 🧾 Honest Limitations
-
-InfraWatch is a local-first SRE/DevOps project, not an enterprise SaaS product.
-
-Not implemented yet:
-
-- user accounts/authentication
-- multi-tenant authorization
-- GitHub OAuth/App repo onboarding
-- automatic builds for arbitrary user repositories from the UI
-- TLS/Ingress production exposure
-- canary or blue-green release strategy
-- WebSocket log streaming
-
-Current deployment scope:
-
-- The UI/API can deploy an already-built container image to the connected Kubernetes cluster.
-- The GitHub Actions workflow deploys the InfraWatch app itself when registry and Kubernetes secrets are configured.
-- It does not yet let any random user connect their GitHub repository and deploy that repository automatically.
-
----
-
-## 📌 One-Line Description
-
-InfraWatch is a local-first Kubernetes deployment and observability platform that gives lightweight apps simple health, logs, metrics, rollout, and audit visibility.
