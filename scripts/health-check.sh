@@ -156,10 +156,12 @@ else
 fi
 
 check_statefulset infrawatch-postgres
+check_deployment infrawatch-redis
 check_deployment infrawatch-backend
 check_deployment infrawatch-frontend
 
 check_service infrawatch-postgres
+check_service infrawatch-redis
 check_service infrawatch-backend
 check_service infrawatch-frontend
 

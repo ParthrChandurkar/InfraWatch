@@ -126,6 +126,23 @@ variable "loki_url" {
   default     = "http://infrawatch-loki-gateway"
 }
 
+variable "redis_url" {
+  description = "Redis URL reachable from the backend for short-lived Prometheus response caching."
+  type        = string
+  default     = "redis://infrawatch-redis:6379/0"
+}
+
+variable "redis_cache_ttl" {
+  description = "Short Redis cache TTL in seconds for dashboard Prometheus query responses."
+  type        = number
+  default     = 5
+
+  validation {
+    condition     = var.redis_cache_ttl >= 1 && var.redis_cache_ttl <= 60
+    error_message = "redis_cache_ttl must be between 1 and 60 seconds."
+  }
+}
+
 variable "rollout_timeout_seconds" {
   description = "Maximum time the backend waits for Kubernetes rollouts."
   type        = number

@@ -8,7 +8,7 @@ InfraWatch is a local-first Kubernetes deployment and observability platform. It
 
 ## 1. Start with Docker Compose
 
-Use Docker Compose first. It starts the InfraWatch dashboard, API, database, Prometheus, Grafana, Loki, Grafana Alloy, and Alertmanager.
+Use Docker Compose first. It starts the InfraWatch dashboard, API, database, Redis cache, Prometheus, Grafana, Loki, Grafana Alloy, and Alertmanager.
 
 Fastest path:
 
@@ -80,6 +80,8 @@ By default, Docker Compose keeps Kubernetes execution disabled:
 ```text
 INFRAWATCH_EXECUTE_KUBECTL=false
 INFRAWATCH_ALLOW_MOCK_OBSERVABILITY=true
+REDIS_URL=redis://redis:6379/0
+REDIS_CACHE_TTL=5
 ```
 
 That means:
@@ -125,12 +127,15 @@ What is real in this mode:
 - Kubernetes services, deployments, StatefulSet, HPA, and rollout checks;
 - backend deployment actions when `INFRAWATCH_EXECUTE_KUBECTL=true`;
 - PostgreSQL-backed state inside the cluster.
+- Redis-backed short TTL cache for repeated Prometheus dashboard metric requests.
 
 What still uses fallback data by default:
 
 - metrics/log responses, until Prometheus, Loki, and Grafana Alloy are installed.
 
 If fallback remains enabled, InfraWatch uses `source: mock` only when required Prometheus/Loki data is missing. A service with real Prometheus CPU, memory, and request-rate data but zero 5xx errors should report `source: prometheus` with a zero error-rate series.
+
+Redis does not replace Prometheus. It caches only real Prometheus metric responses for a few seconds. If Redis is down, the backend bypasses Redis and queries Prometheus directly.
 
 Install the observability stack:
 

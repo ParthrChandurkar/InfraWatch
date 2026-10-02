@@ -287,6 +287,7 @@ log ""
 log "Applying InfraWatch Kubernetes manifests"
 kubectl apply -k "${K8S_DIR}"
 kubectl rollout status statefulset/infrawatch-postgres --namespace "${NAMESPACE}" --timeout=240s
+kubectl rollout status deployment/infrawatch-redis --namespace "${NAMESPACE}" --timeout=180s
 kubectl rollout status deployment/infrawatch-backend --namespace "${NAMESPACE}" --timeout=240s
 kubectl rollout status deployment/infrawatch-frontend --namespace "${NAMESPACE}" --timeout=240s
 

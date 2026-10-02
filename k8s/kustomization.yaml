@@ -7,9 +7,11 @@ resources:
   - deployments/backend.yaml
   - deployments/frontend.yaml
   - deployments/postgres-statefulset.yaml
+  - deployments/redis.yaml
   - services/backend.yaml
   - services/frontend.yaml
   - services/postgres.yaml
+  - services/redis.yaml
   - hpa/backend-hpa.yaml
   - monitoring/alert-rules-configmap.yaml
 

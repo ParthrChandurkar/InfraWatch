@@ -267,6 +267,9 @@ Write-Info "Waiting for rollouts"
 & kubectl rollout status statefulset/infrawatch-postgres --namespace $Namespace --timeout=240s
 Assert-LastCommand "PostgreSQL did not become ready in time."
 
+& kubectl rollout status deployment/infrawatch-redis --namespace $Namespace --timeout=180s
+Assert-LastCommand "Redis did not become ready in time."
+
 & kubectl rollout status deployment/infrawatch-backend --namespace $Namespace --timeout=240s
 Assert-LastCommand "Backend did not become ready in time."
 

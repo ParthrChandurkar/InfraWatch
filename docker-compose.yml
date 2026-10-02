@@ -13,6 +13,8 @@ services:
       INFRAWATCH_SERVICE_NAME: infrawatch-backend
       INFRAWATCH_STATE_FILE: /data/deployments.json
       INFRAWATCH_AUDIT_FILE: /data/audit-log.json
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      REDIS_CACHE_TTL: ${REDIS_CACHE_TTL:-5}
       DATABASE_URL: postgresql://${POSTGRES_USER:-infrawatch}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-infrawatch}
     ports:
       - "${BACKEND_PORT:-8000}:8000"
@@ -24,6 +26,8 @@ services:
       prometheus:
         condition: service_started
       loki:
+        condition: service_started
+      redis:
         condition: service_started
     networks:
       infrawatch:
@@ -59,6 +63,12 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - infrawatch
+
+  redis:
+    image: redis:7.4-alpine
+    container_name: infrawatch-redis
     networks:
       - infrawatch
 

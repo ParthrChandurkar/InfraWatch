@@ -250,6 +250,7 @@ else {
     Write-Info "Scaling InfraWatch workloads to zero replicas"
     Scale-IfExists -Kind "deployment" -Name "infrawatch-backend" -Replicas 0
     Scale-IfExists -Kind "deployment" -Name "infrawatch-frontend" -Replicas 0
+    Scale-IfExists -Kind "deployment" -Name "infrawatch-redis" -Replicas 0
     Scale-IfExists -Kind "statefulset" -Name "infrawatch-postgres" -Replicas 0
 
     Write-Host ""

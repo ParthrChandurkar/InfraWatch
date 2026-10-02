@@ -94,6 +94,7 @@ Rollback is intentionally simple. It uses standard Kubernetes Deployment revisio
 ```text
 Application/Kubernetes
   -> Prometheus scrape
+  -> Redis short TTL cache
   -> FastAPI /metrics/{service}
   -> React charts
 ```
@@ -111,6 +112,19 @@ Backend queries:
 - Memory: `container_memory_working_set_bytes`
 - Request rate: `http_requests_total`
 - Error rate: `http_requests_total{status=~"5.."}`
+
+Redis sits between FastAPI and Prometheus as a cache-aside optimization:
+
+```text
+FastAPI
+  -> Redis cache lookup
+    -> hit: return cached Prometheus response
+    -> miss: query Prometheus, store real response briefly, return response
+```
+
+The cache key includes the service, namespace, Prometheus URL, PromQL queries, range, and step. The TTL is intentionally short so repeated dashboard refreshes avoid duplicate Prometheus API work without hiding fresh telemetry for long.
+
+Redis is optional. If Redis is unavailable, FastAPI continues directly to Prometheus. Mock fallback responses are not cached as Prometheus truth.
 
 In real mode, mock fallback is disabled. If Prometheus is unavailable, the API returns an error instead of fake data.
 

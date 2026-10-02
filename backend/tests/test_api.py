@@ -6,8 +6,35 @@ from fastapi.testclient import TestClient
 
 from app.config import Settings
 from app.main import create_app
-from app.schemas import MetricPoint
+from app.schemas import MetricPoint, ServiceMetrics
 from app.services.observability import PrometheusClient
+
+
+class FakeRedis:
+    """Small async Redis fake used by cache tests."""
+
+    def __init__(self, initial: str | None = None, *, fail_get: bool = False, fail_set: bool = False) -> None:
+        self.initial = initial
+        self.fail_get = fail_get
+        self.fail_set = fail_set
+        self.values: dict[str, str] = {}
+        self.setex_calls: list[tuple[str, int, str]] = []
+
+    async def get(self, key: str) -> str | None:
+        """Return a cached value or simulate Redis being unavailable."""
+
+        if self.fail_get:
+            raise ConnectionError("redis unavailable")
+        return self.values.get(key, self.initial)
+
+    async def setex(self, key: str, ttl: int, value: str) -> bool:
+        """Store a value with the requested TTL or simulate a write failure."""
+
+        if self.fail_set:
+            raise TimeoutError("redis write timeout")
+        self.values[key] = value
+        self.setex_calls.append((key, ttl, value))
+        return True
 
 
 def build_client(tmp_path) -> TestClient:
@@ -134,7 +161,7 @@ def test_empty_prometheus_series_falls_back_to_mock_metrics() -> None:
     settings = Settings(environment="test", allow_mock_observability=True)
     client = PrometheusClient(settings)
 
-    async def empty_query(_query: str):
+    async def empty_query(_query: str, end: int | None = None):
         return []
 
     client._query_range = empty_query  # type: ignore[method-assign]
@@ -151,7 +178,7 @@ def test_empty_prometheus_error_series_means_zero_errors_not_mock_metrics() -> N
     client = PrometheusClient(settings)
     points = [MetricPoint(timestamp=100 + index, value=float(index + 1)) for index in range(3)]
 
-    async def mostly_live_query(query: str):
+    async def mostly_live_query(query: str, end: int | None = None):
         if 'status=~"5.."' in query:
             return []
         return points
@@ -162,3 +189,108 @@ def test_empty_prometheus_error_series_means_zero_errors_not_mock_metrics() -> N
     assert metrics.source == "prometheus"
     assert [point.value for point in metrics.error_rate] == [0.0, 0.0, 0.0]
     assert [point.timestamp for point in metrics.error_rate] == [100, 101, 102]
+
+
+def test_prometheus_metrics_cache_miss_queries_prometheus_and_stores_response() -> None:
+    """A cache miss should query Prometheus and store only the real Prometheus response."""
+
+    settings = Settings(environment="test", allow_mock_observability=True, redis_url="redis://test", redis_cache_ttl=5)
+    redis = FakeRedis()
+    client = PrometheusClient(settings, redis_client=redis)
+    points = [MetricPoint(timestamp=100 + index, value=float(index + 1)) for index in range(3)]
+    calls: list[str] = []
+
+    async def live_query(query: str, end: int | None = None):
+        calls.append(query)
+        return [] if 'status=~"5.."' in query else points
+
+    client._query_range = live_query  # type: ignore[method-assign]
+
+    metrics = asyncio.run(client.service_metrics("catalog-api"))
+
+    assert metrics.source == "prometheus"
+    assert len(calls) == 4
+    assert len(redis.setex_calls) == 1
+    assert redis.setex_calls[0][1] == 5
+    assert ServiceMetrics.model_validate_json(redis.setex_calls[0][2]).source == "prometheus"
+
+
+def test_prometheus_metrics_cache_hit_skips_prometheus() -> None:
+    """A cache hit should return the cached response without calling Prometheus."""
+
+    cached = ServiceMetrics(
+        service="catalog-api",
+        cpu_cores=[MetricPoint(timestamp=100, value=0.2)],
+        memory_megabytes=[MetricPoint(timestamp=100, value=128)],
+        request_rate=[MetricPoint(timestamp=100, value=12)],
+        error_rate=[MetricPoint(timestamp=100, value=0)],
+        source="prometheus",
+    )
+    settings = Settings(environment="test", allow_mock_observability=True, redis_url="redis://test", redis_cache_ttl=5)
+    client = PrometheusClient(settings, redis_client=FakeRedis(initial=cached.model_dump_json()))
+
+    async def should_not_query(_query: str, end: int | None = None):
+        raise AssertionError("Prometheus should not be queried on cache hit")
+
+    client._query_range = should_not_query  # type: ignore[method-assign]
+
+    metrics = asyncio.run(client.service_metrics("catalog-api"))
+
+    assert metrics == cached
+
+
+def test_prometheus_metrics_cache_uses_configured_ttl() -> None:
+    """Cached metrics should use the short configured TTL."""
+
+    settings = Settings(environment="test", allow_mock_observability=True, redis_url="redis://test", redis_cache_ttl=9)
+    redis = FakeRedis()
+    client = PrometheusClient(settings, redis_client=redis)
+    points = [MetricPoint(timestamp=100 + index, value=float(index + 1)) for index in range(3)]
+
+    async def live_query(query: str, end: int | None = None):
+        return [] if 'status=~"5.."' in query else points
+
+    client._query_range = live_query  # type: ignore[method-assign]
+
+    asyncio.run(client.service_metrics("payments-api"))
+
+    assert redis.setex_calls
+    assert redis.setex_calls[0][1] == 9
+
+
+def test_prometheus_metrics_continue_when_redis_is_unavailable() -> None:
+    """Redis errors are bypassed so Prometheus remains available as the source of truth."""
+
+    settings = Settings(environment="test", allow_mock_observability=True, redis_url="redis://test", redis_cache_ttl=5)
+    client = PrometheusClient(settings, redis_client=FakeRedis(fail_get=True, fail_set=True))
+    points = [MetricPoint(timestamp=100 + index, value=float(index + 1)) for index in range(3)]
+    calls: list[str] = []
+
+    async def live_query(query: str, end: int | None = None):
+        calls.append(query)
+        return [] if 'status=~"5.."' in query else points
+
+    client._query_range = live_query  # type: ignore[method-assign]
+
+    metrics = asyncio.run(client.service_metrics("checkout-api"))
+
+    assert metrics.source == "prometheus"
+    assert len(calls) == 4
+
+
+def test_mock_metrics_are_not_cached() -> None:
+    """Mock fallback data should not be cached as if it were Prometheus truth."""
+
+    settings = Settings(environment="test", allow_mock_observability=True, redis_url="redis://test", redis_cache_ttl=5)
+    redis = FakeRedis()
+    client = PrometheusClient(settings, redis_client=redis)
+
+    async def empty_query(_query: str, end: int | None = None):
+        return []
+
+    client._query_range = empty_query  # type: ignore[method-assign]
+
+    metrics = asyncio.run(client.service_metrics("catalog-api"))
+
+    assert metrics.source == "mock"
+    assert redis.setex_calls == []

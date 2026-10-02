@@ -46,12 +46,23 @@ class Settings(BaseSettings):
     loki_url: str = "http://loki:3100"
     observability_timeout_seconds: float = 4.0
     allow_mock_observability: bool = True
+    redis_url: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("INFRAWATCH_REDIS_URL", "REDIS_URL"),
+    )
+    redis_cache_ttl: int = Field(
+        default=5,
+        ge=1,
+        le=60,
+        validation_alias=AliasChoices("INFRAWATCH_REDIS_CACHE_TTL", "REDIS_CACHE_TTL"),
+    )
 
     model_config = SettingsConfigDict(
         env_file=".env",
         env_prefix="INFRAWATCH_",
         case_sensitive=False,
         extra="ignore",
+        populate_by_name=True,
     )
 
 

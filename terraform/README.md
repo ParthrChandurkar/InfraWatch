@@ -27,7 +27,7 @@ Terraform owns these foundational resources:
 | Role | Namespace-scoped permissions to create/update/delete InfraWatch-managed app Deployments, Services, Pods, and HPAs |
 | RoleBinding | Binds the namespace Role to the InfraWatch ServiceAccount |
 | ResourceQuota | Keeps local laptop resource usage bounded |
-| ConfigMap | Non-secret backend runtime configuration |
+| ConfigMap | Non-secret backend runtime configuration, including Prometheus/Loki URLs and Redis cache settings |
 
 Terraform does not create application Deployments, Services, PostgreSQL, Prometheus, Grafana, Loki, Alloy, or Alertmanager workloads. Those remain owned by the existing Kubernetes manifests and scripts.
 
