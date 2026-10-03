@@ -1,0 +1,16 @@
+# LoadBalancer service exposing the InfraWatch dashboard.
+apiVersion: v1
+kind: Service
+metadata:
+  name: infrawatch-frontend
+  namespace: infrawatch
+  labels:
+    app.kubernetes.io/name: infrawatch-frontend
+spec:
+  type: LoadBalancer
+  selector:
+    app.kubernetes.io/name: infrawatch-frontend
+  ports:
+    - name: http
+      port: 80
+      targetPort: http

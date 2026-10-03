@@ -1,0 +1,29 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: imagepull-demo
+  namespace: infrawatch
+  labels:
+    app.kubernetes.io/name: imagepull-demo
+    app.kubernetes.io/part-of: infrawatch-failure-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: imagepull-demo
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: imagepull-demo
+        app.kubernetes.io/part-of: infrawatch-failure-demo
+    spec:
+      containers:
+        - name: imagepull-demo
+          image: docker.io/library/this-image-does-not-exist-infrawatch:missing
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi

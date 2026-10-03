@@ -73,7 +73,67 @@ Grafana login uses the values from your local `.env` file.
 
 ---
 
-## 2. Understand Demo Mode
+## 2. Try the Python CLI foundation
+
+InfraWatch includes an installable Python CLI foundation. From the project root:
+
+```powershell
+python -m pip install -e .
+infrawatch --help
+infrawatch --version
+infrawatch doctor
+```
+
+To test the installable package without relying on the repository checkout:
+
+```powershell
+python -m build
+python -m venv C:\Temp\infrawatch-wheel-test
+C:\Temp\infrawatch-wheel-test\Scripts\python.exe -m pip install .\dist\infrawatch-0.3.0-py3-none-any.whl
+Set-Location C:\Temp
+infrawatch --version
+infrawatch doctor
+```
+
+The locally built wheel contains the runtime Terraform and Kubernetes resources used by the CLI. This is the local package workflow; InfraWatch is not published to PyPI yet.
+
+`infrawatch doctor` checks local readiness: Python, Docker, Docker Compose, kubectl, Minikube, Terraform, Kustomize rendering, Kubernetes context, and the InfraWatch namespace when a cluster is reachable.
+
+Start the local Kubernetes stack:
+
+```powershell
+infrawatch start
+```
+
+This is the preferred local Kubernetes path. It uses Minikube, Terraform, Kustomize, kubectl, and the existing repository configuration. It is idempotent: running it again reconciles the same InfraWatch-owned resources instead of deleting or recreating the cluster.
+
+If you also want the existing observability installer to run on Windows:
+
+```powershell
+infrawatch start --install-observability
+```
+
+Without that flag, `start` reconciles the core InfraWatch application stack and `status` reports observability components if they are already installed.
+
+After InfraWatch is deployed to Kubernetes, check the running components:
+
+```powershell
+infrawatch status
+```
+
+`infrawatch status` is different from `doctor`: it checks the current runtime state of the InfraWatch namespace and components such as backend, frontend, PostgreSQL, Redis, Prometheus, Grafana, Loki, and Alertmanager.
+
+The lifecycle command below is reserved but does not manage infrastructure yet:
+
+```powershell
+infrawatch stop
+```
+
+Continue using the manual stop scripts in this guide when you need to pause or remove the local stack.
+
+---
+
+## 3. Understand Demo Mode
 
 By default, Docker Compose keeps Kubernetes execution disabled:
 
@@ -95,7 +155,7 @@ This is intentional for first-time users.
 
 ---
 
-## 3. Try real local Kubernetes
+## 4. Try real local Kubernetes
 
 After the Docker Compose stack works, use a local Kubernetes cluster for real local Kubernetes deployment.
 
@@ -119,7 +179,7 @@ Windows PowerShell Minikube path:
 .\scripts\start-k8s.ps1
 ```
 
-This deploys InfraWatch into a local Minikube cluster and prints the dashboard URL. The script uses a 3072 MB Minikube default so it works on Docker Desktop installs with limited memory.
+This is the script-backed path used by the CLI workflow. It deploys InfraWatch into a local Minikube cluster and prints the dashboard URL. The script uses a 3072 MB Minikube default so it works on Docker Desktop installs with limited memory.
 
 What is real in this mode:
 
@@ -222,7 +282,7 @@ minikube service infrawatch-frontend --namespace infrawatch
 
 ---
 
-## 4. What to test first
+## 5. What to test first
 
 Start with an already-built public image:
 
@@ -239,7 +299,7 @@ In Kubernetes mode, InfraWatch applies a real Kubernetes Deployment and Service.
 
 ---
 
-## 5. What InfraWatch is not yet
+## 6. What InfraWatch is not yet
 
 InfraWatch is not a full SaaS platform yet.
 

@@ -40,6 +40,20 @@ jobs:
         working-directory: backend
         run: python -m pytest
 
+      - name: Install CLI package
+        run: pip install -e .
+
+      - name: Lint CLI package
+        run: ruff check infrawatch tests
+
+      - name: Run CLI tests
+        run: python -m pytest tests
+
+      - name: Verify CLI entry point
+        run: |
+          infrawatch --help
+          infrawatch --version
+
       - name: Set up Node
         uses: actions/setup-node@v4
         with:

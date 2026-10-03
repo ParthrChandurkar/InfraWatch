@@ -1,0 +1,43 @@
+# Optional Istio traffic policy for managed services deployed by InfraWatch.
+# Apply this only after Istio is installed and sidecar injection is enabled.
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: catalog-api
+  namespace: infrawatch
+spec:
+  host: catalog-api.infrawatch.svc.cluster.local
+  trafficPolicy:
+    loadBalancer:
+      simple: LEAST_REQUEST
+    outlierDetection:
+      consecutive5xxErrors: 5
+      interval: 30s
+      baseEjectionTime: 2m
+  subsets:
+    - name: stable
+      labels:
+        version: stable
+    - name: canary
+      labels:
+        version: canary
+---
+# Optional weighted routing policy for future canary deployments.
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: catalog-api
+  namespace: infrawatch
+spec:
+  hosts:
+    - catalog-api.infrawatch.svc.cluster.local
+  http:
+    - route:
+        - destination:
+            host: catalog-api.infrawatch.svc.cluster.local
+            subset: stable
+          weight: 90
+        - destination:
+            host: catalog-api.infrawatch.svc.cluster.local
+            subset: canary
+          weight: 10

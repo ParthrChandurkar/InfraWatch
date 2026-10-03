@@ -1,0 +1,9 @@
+# Non-secret PostgreSQL settings for the InfraWatch database.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: infrawatch-postgres-config
+  namespace: infrawatch
+data:
+  POSTGRES_USER: infrawatch
+  POSTGRES_DB: infrawatch

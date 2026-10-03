@@ -1,0 +1,16 @@
+# Headless service for stable PostgreSQL StatefulSet networking.
+apiVersion: v1
+kind: Service
+metadata:
+  name: infrawatch-postgres
+  namespace: infrawatch
+  labels:
+    app.kubernetes.io/name: infrawatch-postgres
+spec:
+  clusterIP: None
+  selector:
+    app.kubernetes.io/name: infrawatch-postgres
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres

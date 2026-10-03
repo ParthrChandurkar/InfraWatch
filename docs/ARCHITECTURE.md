@@ -2,6 +2,52 @@
 
 InfraWatch has two explicit modes.
 
+## CLI boundary
+
+```text
+infrawatch CLI
+  -> orchestration layer
+  -> existing scripts / Terraform / Kustomize / Docker / Kubernetes
+```
+
+The Python package currently provides:
+
+- `infrawatch --help`
+- `infrawatch --version`
+- `infrawatch doctor` for local prerequisite and readiness diagnostics
+- `infrawatch status` for current Kubernetes runtime state
+- `infrawatch start` for local Minikube/Terraform/Kustomize startup
+
+The CLI does not duplicate Terraform or Kubernetes manifests. `infrawatch start` orchestrates the existing tools and resource definitions:
+
+```text
+infrawatch start
+  -> prerequisite checks
+  -> minikube start/use-context
+  -> terraform init/fmt/validate/apply
+  -> kubectl apply -k k8s
+  -> rollout waits
+  -> optional existing observability installer on Windows when requested
+  -> status validation
+```
+
+The `stop` lifecycle operation is still intentionally left to the existing scripts until cleanup semantics are designed.
+
+## Packaged runtime resources
+
+The Python package includes the runtime resources required by the CLI:
+
+```text
+infrawatch.resources
+  -> terraform/
+  -> k8s/
+  -> monitoring/
+  -> logging/
+  -> scripts/start-observability.ps1
+```
+
+When running from a source checkout, the CLI uses the checkout files directly. When running from an installed wheel outside the repository, it materializes the packaged resources into a versioned user cache directory and runs Terraform/Kustomize from there. Terraform state and downloaded providers are not packaged.
+
 ## Demo Mode
 
 ```text

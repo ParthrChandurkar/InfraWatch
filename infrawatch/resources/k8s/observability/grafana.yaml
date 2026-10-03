@@ -1,0 +1,93 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: infrawatch-grafana
+  namespace: infrawatch
+  labels:
+    app.kubernetes.io/name: infrawatch-grafana
+    app.kubernetes.io/part-of: infrawatch-observability
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: infrawatch-grafana
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: infrawatch-grafana
+        app.kubernetes.io/part-of: infrawatch-observability
+    spec:
+      containers:
+        - name: grafana
+          image: grafana/grafana:11.4.0
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: GF_SECURITY_ADMIN_USER
+              value: admin
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: infrawatch-grafana-admin
+                  key: admin-password
+            - name: GF_USERS_ALLOW_SIGN_UP
+              value: "false"
+          ports:
+            - name: http
+              containerPort: 3000
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 45
+            periodSeconds: 20
+            timeoutSeconds: 5
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 300m
+              memory: 512Mi
+          volumeMounts:
+            - name: datasource-provisioning
+              mountPath: /etc/grafana/provisioning/datasources
+            - name: dashboard-provider
+              mountPath: /etc/grafana/provisioning/dashboards
+            - name: dashboards
+              mountPath: /var/lib/grafana/dashboards
+            - name: data
+              mountPath: /var/lib/grafana
+      volumes:
+        - name: datasource-provisioning
+          configMap:
+            name: infrawatch-grafana-datasources
+        - name: dashboard-provider
+          configMap:
+            name: infrawatch-grafana-dashboard-provider
+        - name: dashboards
+          configMap:
+            name: infrawatch-grafana-dashboards
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: infrawatch-grafana
+  namespace: infrawatch
+  labels:
+    app.kubernetes.io/name: infrawatch-grafana
+spec:
+  selector:
+    app.kubernetes.io/name: infrawatch-grafana
+  ports:
+    - name: http
+      port: 80
+      targetPort: http

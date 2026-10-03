@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: readiness-failure-demo
+  namespace: infrawatch
+  labels:
+    app.kubernetes.io/name: readiness-failure-demo
+    app.kubernetes.io/part-of: infrawatch-failure-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: readiness-failure-demo
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: readiness-failure-demo
+        app.kubernetes.io/part-of: infrawatch-failure-demo
+    spec:
+      containers:
+        - name: readiness-failure-demo
+          image: nginx:1.27-alpine
+          ports:
+            - name: http
+              containerPort: 80
+          readinessProbe:
+            httpGet:
+              path: /this-path-intentionally-does-not-exist
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi

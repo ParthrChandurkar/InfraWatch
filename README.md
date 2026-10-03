@@ -24,6 +24,7 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for component boundaries and 
 
 | Area | Technologies |
 | --- | --- |
+| CLI | Python package, argparse |
 | Frontend | React, TypeScript, Vite |
 | Backend | Python, FastAPI |
 | Data | PostgreSQL, Redis |
@@ -45,9 +46,46 @@ docker compose ps
 
 Refer to [`docs/GETTING_STARTED.md`](docs/GETTING_STARTED.md) for the current service addresses and validation flow. Stop the stack with `docker compose down`.
 
+## Python CLI Package Foundation
+
+InfraWatch now includes an installable Python CLI. From a repository checkout:
+
+```powershell
+python -m pip install -e .
+infrawatch --help
+infrawatch --version
+infrawatch doctor
+infrawatch start
+infrawatch status
+```
+
+For standalone local testing before a PyPI release, build and install the wheel:
+
+```powershell
+python -m build
+python -m venv .venv-package-test
+.\.venv-package-test\Scripts\python.exe -m pip install .\dist\infrawatch-0.3.0-py3-none-any.whl
+```
+
+The wheel includes the Terraform and Kubernetes runtime resources needed by the CLI, so `infrawatch doctor`, `infrawatch start`, and `infrawatch status` no longer require running from the Git repository. InfraWatch is not published to PyPI yet.
+
+Use `infrawatch doctor` to check whether your machine has the local tools and repository configuration needed to run InfraWatch. Use `infrawatch status` to inspect the current Kubernetes runtime state of InfraWatch components.
+
+`infrawatch start` is the primary local Kubernetes startup path. It starts/reconciles Minikube, applies the Terraform foundation, applies the existing Kustomize manifests, waits for core workloads, and checks status. Observability installation remains explicit; on Windows you can add `--install-observability` to run the existing observability installer without starting long-running port-forward processes.
+
+The `infrawatch stop` command exists, but it is not wired to manage infrastructure yet. It currently prints clear guidance for the existing supported scripts. Use the manual stop scripts until cleanup semantics are designed.
+
 ## Local Kubernetes Deployment
 
 Prerequisites: Docker, Minikube, `kubectl`, Terraform, and Helm.
+
+Preferred CLI path:
+
+```powershell
+infrawatch doctor
+infrawatch start
+infrawatch status
+```
 
 The repository includes helper scripts under `scripts/` as well as a manual path. The core manual flow is:
 

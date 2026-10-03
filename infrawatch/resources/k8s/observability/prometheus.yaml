@@ -1,0 +1,79 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: infrawatch-prometheus
+  namespace: infrawatch
+  labels:
+    app.kubernetes.io/name: infrawatch-prometheus
+    app.kubernetes.io/part-of: infrawatch-observability
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: infrawatch-prometheus
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: infrawatch-prometheus
+        app.kubernetes.io/part-of: infrawatch-observability
+    spec:
+      serviceAccountName: infrawatch-prometheus
+      containers:
+        - name: prometheus
+          image: prom/prometheus:v2.55.1
+          imagePullPolicy: IfNotPresent
+          args:
+            - --config.file=/etc/prometheus/prometheus.yml
+            - --storage.tsdb.path=/prometheus
+            - --storage.tsdb.retention.time=6h
+            - --web.enable-lifecycle
+          ports:
+            - name: http
+              containerPort: 9090
+          readinessProbe:
+            httpGet:
+              path: /-/ready
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /-/healthy
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            timeoutSeconds: 5
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 600m
+              memory: 768Mi
+          volumeMounts:
+            - name: config
+              mountPath: /etc/prometheus
+            - name: data
+              mountPath: /prometheus
+      volumes:
+        - name: config
+          configMap:
+            name: infrawatch-prometheus-config
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: infrawatch-prometheus
+  namespace: infrawatch
+  labels:
+    app.kubernetes.io/name: infrawatch-prometheus
+spec:
+  selector:
+    app.kubernetes.io/name: infrawatch-prometheus
+  ports:
+    - name: http
+      port: 9090
+      targetPort: http

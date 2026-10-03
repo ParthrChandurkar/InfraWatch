@@ -1,0 +1,21 @@
+# Kustomize bundle for deploying InfraWatch application workloads.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - configmaps/postgres-config.yaml
+  - deployments/backend.yaml
+  - deployments/frontend.yaml
+  - deployments/postgres-statefulset.yaml
+  - deployments/redis.yaml
+  - services/backend.yaml
+  - services/frontend.yaml
+  - services/postgres.yaml
+  - services/redis.yaml
+  - hpa/backend-hpa.yaml
+  - monitoring/alert-rules-configmap.yaml
+
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: infrawatch
+    includeSelectors: true

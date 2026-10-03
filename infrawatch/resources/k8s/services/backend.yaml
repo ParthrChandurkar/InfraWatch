@@ -1,0 +1,16 @@
+# ClusterIP service exposing the InfraWatch backend inside Kubernetes.
+apiVersion: v1
+kind: Service
+metadata:
+  name: infrawatch-backend
+  namespace: infrawatch
+  labels:
+    app.kubernetes.io/name: infrawatch-backend
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: infrawatch-backend
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http

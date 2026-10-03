@@ -1,0 +1,15 @@
+# Alertmanager routing configuration for local InfraWatch environments.
+route:
+  receiver: default-notifications
+  group_by:
+    - alertname
+    - severity
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+
+receivers:
+  - name: default-notifications
+    webhook_configs:
+      - url: http://localhost:9999/alerts
+        send_resolved: true

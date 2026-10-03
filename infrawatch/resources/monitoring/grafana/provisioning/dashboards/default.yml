@@ -1,0 +1,13 @@
+# Grafana dashboard provisioning for InfraWatch JSON dashboards.
+apiVersion: 1
+
+providers:
+  - name: InfraWatch
+    orgId: 1
+    folder: InfraWatch
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards

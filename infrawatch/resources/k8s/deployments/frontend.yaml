@@ -1,0 +1,58 @@
+# React frontend deployment served by Nginx.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: infrawatch-frontend
+  namespace: infrawatch
+  labels:
+    app.kubernetes.io/name: infrawatch-frontend
+    app.kubernetes.io/part-of: infrawatch
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: infrawatch-frontend
+      app.kubernetes.io/part-of: infrawatch
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: infrawatch-frontend
+        app.kubernetes.io/part-of: infrawatch
+    spec:
+      containers:
+        - name: frontend
+          image: docker.io/parthchn178/infrawatch-frontend:latest
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 101
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi

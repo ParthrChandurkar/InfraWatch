@@ -1,0 +1,66 @@
+[build-system]
+requires = ["setuptools>=70", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "infrawatch"
+version = "0.3.0"
+description = "Local-first Kubernetes deployment and observability tooling."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+authors = [
+  { name = "InfraWatch Contributors" }
+]
+keywords = [
+  "kubernetes",
+  "observability",
+  "prometheus",
+  "grafana",
+  "sre",
+  "devops",
+  "local-development"
+]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: System :: Monitoring",
+  "Topic :: Utilities"
+]
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/ParthrChandurkar/InfraWatch"
+Repository = "https://github.com/ParthrChandurkar/InfraWatch"
+Documentation = "https://github.com/ParthrChandurkar/InfraWatch#readme"
+
+[project.scripts]
+infrawatch = "infrawatch.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["infrawatch*"]
+
+[tool.setuptools.package-data]
+infrawatch = [
+  "resources/**/*"
+]
+
+[tool.setuptools.exclude-package-data]
+infrawatch = [
+  "resources/**/__pycache__/*",
+  "resources/**/*.pyc"
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

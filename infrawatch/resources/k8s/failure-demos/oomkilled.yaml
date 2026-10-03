@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: oom-demo
+  namespace: infrawatch
+  labels:
+    app.kubernetes.io/name: oom-demo
+    app.kubernetes.io/part-of: infrawatch-failure-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: oom-demo
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: oom-demo
+        app.kubernetes.io/part-of: infrawatch-failure-demo
+    spec:
+      containers:
+        - name: oom-demo
+          image: python:3.12-alpine
+          command:
+            - python
+            - -c
+            - |
+              data = []
+              while True:
+                  data.append("x" * 1048576)
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
