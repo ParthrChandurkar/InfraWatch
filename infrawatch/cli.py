@@ -7,14 +7,13 @@ from collections.abc import Sequence
 
 from . import __version__
 from .checks import run_doctor, run_status
-from .orchestration import lifecycle_guidance
 from .start import StartOptions, run_start
+from .stop import StopOptions, run_stop
 
 DESCRIPTION = """InfraWatch local Kubernetes deployment and observability CLI.
 
 This CLI exposes local machine diagnostics, local Kubernetes startup, and
-runtime status for InfraWatch. Stop/cleanup orchestration still lives in the
-existing repository scripts until safe cleanup semantics are designed.
+runtime status for InfraWatch.
 """
 
 
@@ -60,10 +59,20 @@ def build_parser() -> argparse.ArgumentParser:
 
     stop = subcommands.add_parser(
         "stop",
-        help="Planned local InfraWatch shutdown command. Currently prints supported script guidance.",
-        description="Planned local InfraWatch shutdown command. Currently prints supported script guidance.",
+        help="Stop InfraWatch app resources while preserving Minikube and Terraform foundation state.",
+        description=(
+            "Stop InfraWatch app resources while preserving Minikube, Terraform state, and Terraform-owned "
+            "foundation resources."
+        ),
     )
-    stop.set_defaults(handler=_lifecycle_command)
+    stop.add_argument("--namespace", default="infrawatch", help="Kubernetes namespace to manage.")
+    stop.add_argument(
+        "--remove-observability",
+        action="store_true",
+        help="Also uninstall InfraWatch observability workloads. By default they are preserved.",
+    )
+    stop.add_argument("--timeout-seconds", type=int, default=180, help="Timeout for Kubernetes deletion waits.")
+    stop.set_defaults(handler=_stop_command)
     doctor = subcommands.add_parser(
         "doctor",
         help="Check whether the local machine is ready to run InfraWatch.",
@@ -83,13 +92,6 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _lifecycle_command(args: argparse.Namespace) -> int:
-    """Handle lifecycle placeholders without pretending to mutate infrastructure."""
-
-    print(lifecycle_guidance(args.command))
-    return 2
-
-
 def _start_command(args: argparse.Namespace) -> int:
     """Run local Kubernetes startup."""
 
@@ -101,6 +103,18 @@ def _start_command(args: argparse.Namespace) -> int:
             minikube_cpus=args.minikube_cpus,
             strict_observability=args.strict_observability,
             skip_observability=not args.install_observability,
+            timeout_seconds=args.timeout_seconds,
+        )
+    )
+
+
+def _stop_command(args: argparse.Namespace) -> int:
+    """Run safe local Kubernetes shutdown."""
+
+    return run_stop(
+        StopOptions(
+            namespace=args.namespace,
+            remove_observability=args.remove_observability,
             timeout_seconds=args.timeout_seconds,
         )
     )

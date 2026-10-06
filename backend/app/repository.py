@@ -11,6 +11,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from threading import Lock
 from typing import Protocol
+from urllib.parse import unquote, urlparse
 from uuid import uuid4
 
 import psycopg2
@@ -181,6 +182,21 @@ def utc_now() -> datetime:
     return datetime.now(UTC)
 
 
+def connect_postgres(database_url: str):
+    """Open PostgreSQL connections from URL settings with explicit libpq parameters."""
+
+    parsed = urlparse(database_url)
+    if parsed.scheme in {"postgresql", "postgres"}:
+        return psycopg2.connect(
+            dbname=parsed.path.lstrip("/") or None,
+            user=unquote(parsed.username or ""),
+            password=unquote(parsed.password or ""),
+            host=parsed.hostname,
+            port=parsed.port or 5432,
+        )
+    return psycopg2.connect(database_url)
+
+
 class PostgresDeploymentRepository:
     """PostgreSQL-backed deployment repository for real local Kubernetes mode."""
 
@@ -268,7 +284,7 @@ class PostgresDeploymentRepository:
     def _connect(self):
         """Open a short-lived database connection."""
 
-        return psycopg2.connect(self._database_url)
+        return connect_postgres(self._database_url)
 
 
 class PostgresAuditLogRepository:
@@ -362,4 +378,4 @@ class PostgresAuditLogRepository:
     def _connect(self):
         """Open a short-lived database connection."""
 
-        return psycopg2.connect(self._database_url)
+        return connect_postgres(self._database_url)

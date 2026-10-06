@@ -73,7 +73,19 @@ Use `infrawatch doctor` to check whether your machine has the local tools and re
 
 `infrawatch start` is the primary local Kubernetes startup path. It starts/reconciles Minikube, applies the Terraform foundation, applies the existing Kustomize manifests, waits for core workloads, and checks status. Observability installation remains explicit; on Windows you can add `--install-observability` to run the existing observability installer without starting long-running port-forward processes.
 
-The `infrawatch stop` command exists, but it is not wired to manage infrastructure yet. It currently prints clear guidance for the existing supported scripts. Use the manual stop scripts until cleanup semantics are designed.
+`infrawatch stop` safely removes the local InfraWatch application runtime resources created by Kustomize, including backend, frontend, PostgreSQL, Redis, HPA, and app ConfigMaps. It intentionally preserves:
+
+- the Minikube cluster;
+- Terraform state;
+- Terraform-owned foundation resources such as namespace, RBAC, ResourceQuota, ServiceAccount, and backend runtime ConfigMap;
+- the generated `infrawatch-secrets` Secret, because PostgreSQL PVC data is preserved and must keep the same password;
+- observability workloads by default, so Prometheus/Grafana/Loki/Alloy can keep running across app restarts.
+
+If you intentionally want to remove the observability stack too, run:
+
+```powershell
+infrawatch stop --remove-observability
+```
 
 ## Local Kubernetes Deployment
 
@@ -85,6 +97,7 @@ Preferred CLI path:
 infrawatch doctor
 infrawatch start
 infrawatch status
+infrawatch stop
 ```
 
 The repository includes helper scripts under `scripts/` as well as a manual path. The core manual flow is:

@@ -17,6 +17,7 @@ The Python package currently provides:
 - `infrawatch doctor` for local prerequisite and readiness diagnostics
 - `infrawatch status` for current Kubernetes runtime state
 - `infrawatch start` for local Minikube/Terraform/Kustomize startup
+- `infrawatch stop` for safe app runtime cleanup while preserving Terraform foundation state
 
 The CLI does not duplicate Terraform or Kubernetes manifests. `infrawatch start` orchestrates the existing tools and resource definitions:
 
@@ -31,7 +32,21 @@ infrawatch start
   -> status validation
 ```
 
-The `stop` lifecycle operation is still intentionally left to the existing scripts until cleanup semantics are designed.
+`infrawatch stop` respects the same ownership boundary:
+
+```text
+infrawatch stop
+  -> verify runtime resources
+  -> verify kubectl can reach the current cluster
+  -> verify Terraform state still tracks the 8 foundation resources
+  -> kubectl delete -k k8s
+  -> preserve generated app runtime Secret
+  -> wait for app pods to disappear
+  -> verify Terraform state and plan again
+  -> verify Minikube is still running
+```
+
+The default stop path removes app-owned Kustomize runtime resources and leaves the Minikube cluster, Terraform state, namespace, RBAC, ResourceQuota, ServiceAccount, backend runtime ConfigMap, PostgreSQL PVC data, and generated `infrawatch-secrets` Secret intact. The Secret is preserved because the retained database volume expects the same password on restart. Observability workloads are preserved by default. `infrawatch stop --remove-observability` explicitly removes the InfraWatch observability manifests and Helm releases while still preserving the Terraform foundation.
 
 ## Packaged runtime resources
 

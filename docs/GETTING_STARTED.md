@@ -123,13 +123,19 @@ infrawatch status
 
 `infrawatch status` is different from `doctor`: it checks the current runtime state of the InfraWatch namespace and components such as backend, frontend, PostgreSQL, Redis, Prometheus, Grafana, Loki, and Alertmanager.
 
-The lifecycle command below is reserved but does not manage infrastructure yet:
+To stop the Kubernetes app stack without destroying the Minikube cluster or Terraform foundation:
 
 ```powershell
 infrawatch stop
 ```
 
-Continue using the manual stop scripts in this guide when you need to pause or remove the local stack.
+This removes InfraWatch app resources managed by the main Kustomize stack: backend, frontend, PostgreSQL, Redis, HPA, and app ConfigMaps. It keeps the Terraform-owned namespace, RBAC, ResourceQuota, ServiceAccount, backend ConfigMap, Terraform state, Minikube cluster, PostgreSQL PVC data, and generated `infrawatch-secrets` Secret intact. The Secret is preserved because the retained PostgreSQL data needs the same password after restart. Running `infrawatch start` again recreates the app stack on top of the same foundation.
+
+By default, observability workloads are preserved so Prometheus/Grafana/Loki/Alloy can continue to exist across app restarts. To intentionally remove them too:
+
+```powershell
+infrawatch stop --remove-observability
+```
 
 ---
 
@@ -246,6 +252,12 @@ To pause the Kubernetes workloads but keep local data:
 
 ```powershell
 .\scripts\stop-k8s.ps1
+```
+
+The CLI equivalent for stopping only the app runtime while preserving Terraform foundation resources is:
+
+```powershell
+infrawatch stop
 ```
 
 To delete the InfraWatch Kubernetes namespace, secrets, and local PVC data safely:

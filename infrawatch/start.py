@@ -10,6 +10,7 @@ import urllib.error
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import quote
 
 from .checks import CommandResult, Level, Runner, SubprocessRunner, command_exists, status_results
 from .orchestration import platform_label
@@ -42,6 +43,15 @@ class Step:
     hint: str = ""
 
 
+@dataclass(frozen=True)
+class FoundationResource:
+    """One Terraform-owned InfraWatch foundation resource."""
+
+    address: str
+    import_id: str
+    kubectl_args: list[str]
+
+
 class StartError(RuntimeError):
     """Normal user-facing startup failure."""
 
@@ -53,6 +63,47 @@ class StartError(RuntimeError):
 
 class Starter:
     """Coordinate the local Kubernetes startup flow."""
+
+    FOUNDATION_RESOURCES = (
+        FoundationResource(
+            "kubernetes_namespace_v1.infrawatch", DEFAULT_NAMESPACE, ["get", "namespace", DEFAULT_NAMESPACE]
+        ),
+        FoundationResource(
+            "kubernetes_service_account_v1.backend",
+            f"{DEFAULT_NAMESPACE}/infrawatch-backend",
+            ["get", "serviceaccount", "infrawatch-backend", "--namespace", DEFAULT_NAMESPACE],
+        ),
+        FoundationResource(
+            "kubernetes_cluster_role_v1.local_reader",
+            "infrawatch-local-reader",
+            ["get", "clusterrole", "infrawatch-local-reader"],
+        ),
+        FoundationResource(
+            "kubernetes_cluster_role_binding_v1.local_reader",
+            "infrawatch-local-reader",
+            ["get", "clusterrolebinding", "infrawatch-local-reader"],
+        ),
+        FoundationResource(
+            "kubernetes_role_v1.deployer",
+            f"{DEFAULT_NAMESPACE}/infrawatch-deployer",
+            ["get", "role", "infrawatch-deployer", "--namespace", DEFAULT_NAMESPACE],
+        ),
+        FoundationResource(
+            "kubernetes_role_binding_v1.deployer",
+            f"{DEFAULT_NAMESPACE}/infrawatch-deployer",
+            ["get", "rolebinding", "infrawatch-deployer", "--namespace", DEFAULT_NAMESPACE],
+        ),
+        FoundationResource(
+            "kubernetes_resource_quota_v1.infrawatch",
+            f"{DEFAULT_NAMESPACE}/infrawatch-quota",
+            ["get", "resourcequota", "infrawatch-quota", "--namespace", DEFAULT_NAMESPACE],
+        ),
+        FoundationResource(
+            "kubernetes_config_map_v1.backend_config",
+            f"{DEFAULT_NAMESPACE}/infrawatch-backend-config",
+            ["get", "configmap", "infrawatch-backend-config", "--namespace", DEFAULT_NAMESPACE],
+        ),
+    )
 
     def __init__(self, runner: Runner | None = None, repo_root: Path | None = None) -> None:
         self.runner = runner or SubprocessRunner()
@@ -168,75 +219,109 @@ class Starter:
         if not terraform_dir.exists():
             raise StartError("Terraform", "terraform/ directory is missing")
 
-        self._run_required(["terraform", "-chdir=terraform", "init"], "Terraform init", "completed", timeout=180)
-        self._run_required(
-            ["terraform", "-chdir=terraform", "fmt", "-check"],
-            "Terraform fmt",
-            "formatted",
-            timeout=60,
-        )
-        self._run_required(
-            ["terraform", "-chdir=terraform", "validate"],
-            "Terraform validate",
-            "valid",
-            timeout=60,
-        )
+        self._run_terraform_required(["init"], "Terraform init", "completed", timeout=180)
+        self._run_terraform_required(["fmt", "-check"], "Terraform fmt", "formatted", timeout=60)
+        self._run_terraform_required(["validate"], "Terraform validate", "valid", timeout=60)
         self._import_existing_foundation(options.namespace)
-        self._run_required(
-            ["terraform", "-chdir=terraform", "apply", "-auto-approve", "-var=kube_context=minikube"],
+        self._verify_terraform_plan()
+        self._run_terraform_required(
+            ["apply", "-auto-approve", "-var=kube_context=minikube"],
             "Terraform apply",
             "foundation applied",
             timeout=600,
         )
 
     def _import_existing_foundation(self, namespace: str) -> None:
-        resources = [
-            ("kubernetes_namespace_v1.infrawatch", namespace, ["get", "namespace", namespace]),
-            (
-                "kubernetes_service_account_v1.backend",
-                f"{namespace}/infrawatch-backend",
-                ["get", "serviceaccount", "infrawatch-backend", "--namespace", namespace],
-            ),
-            (
-                "kubernetes_cluster_role_v1.local_reader",
-                "infrawatch-local-reader",
-                ["get", "clusterrole", "infrawatch-local-reader"],
-            ),
-            (
-                "kubernetes_cluster_role_binding_v1.local_reader",
-                "infrawatch-local-reader",
-                ["get", "clusterrolebinding", "infrawatch-local-reader"],
-            ),
-            (
-                "kubernetes_role_v1.deployer",
-                f"{namespace}/infrawatch-deployer",
-                ["get", "role", "infrawatch-deployer", "--namespace", namespace],
-            ),
-            (
-                "kubernetes_role_binding_v1.deployer",
-                f"{namespace}/infrawatch-deployer",
-                ["get", "rolebinding", "infrawatch-deployer", "--namespace", namespace],
-            ),
-            (
-                "kubernetes_resource_quota_v1.infrawatch",
-                f"{namespace}/infrawatch-quota",
-                ["get", "resourcequota", "infrawatch-quota", "--namespace", namespace],
-            ),
-            (
-                "kubernetes_config_map_v1.backend_config",
-                f"{namespace}/infrawatch-backend-config",
-                ["get", "configmap", "infrawatch-backend-config", "--namespace", namespace],
-            ),
-        ]
-        for address, import_id, kubectl_args in resources:
-            if self.runner.run(["terraform", "-chdir=terraform", "state", "show", address], timeout=20).returncode == 0:
+        resources = self._foundation_resources(namespace)
+        state_addresses = self._terraform_state_addresses()
+        tracked_addresses = {resource.address for resource in resources if resource.address in state_addresses}
+        existing_addresses: set[str] = set()
+        imported_addresses: list[str] = []
+
+        for resource in resources:
+            if resource.address in state_addresses:
                 continue
-            if self.runner.run(["kubectl", *kubectl_args], timeout=20).returncode == 0:
-                self.runner.run(
-                    ["terraform", "-chdir=terraform", "import", "-var=kube_context=minikube", address, import_id],
-                    timeout=120,
+            if self.runner.run(["kubectl", *resource.kubectl_args], cwd=self.repo_root, timeout=20).returncode == 0:
+                existing_addresses.add(resource.address)
+                imported = self._run_terraform(
+                    ["import", "-var=kube_context=minikube", resource.address, resource.import_id], timeout=120
                 )
-        self._record(True, "Terraform imports", "existing foundation resources reconciled")
+                if imported.returncode != 0:
+                    raise StartError(
+                        "Terraform imports",
+                        f"could not import {resource.address}",
+                        self._command_output(imported),
+                    )
+                imported_addresses.append(resource.address)
+
+        if existing_addresses:
+            reconciled_state = self._terraform_state_addresses()
+            missing = sorted(address for address in existing_addresses if address not in reconciled_state)
+            if missing:
+                raise StartError(
+                    "Terraform imports",
+                    "import verification failed",
+                    "Missing from Terraform state: " + ", ".join(missing),
+                )
+
+        if imported_addresses:
+            self._record(
+                True, "Terraform imports", f"imported {len(imported_addresses)} existing foundation resource(s)"
+            )
+        elif existing_addresses:
+            self._record(True, "Terraform imports", "existing foundation resources already reconciled")
+        elif tracked_addresses:
+            self._record(True, "Terraform imports", "foundation resources already tracked in Terraform state")
+        else:
+            self._record(True, "Terraform imports", "no existing foundation resources to import")
+
+    def _foundation_resources(self, namespace: str) -> tuple[FoundationResource, ...]:
+        if namespace == DEFAULT_NAMESPACE:
+            return self.FOUNDATION_RESOURCES
+        return tuple(
+            FoundationResource(
+                resource.address,
+                resource.import_id.replace(DEFAULT_NAMESPACE, namespace),
+                [part.replace(DEFAULT_NAMESPACE, namespace) for part in resource.kubectl_args],
+            )
+            for resource in self.FOUNDATION_RESOURCES
+        )
+
+    def _terraform_state_addresses(self) -> set[str]:
+        result = self._run_terraform(["state", "list"], timeout=30)
+        if result.returncode != 0:
+            output = self._command_output(result)
+            if "No state file" in output or "state file" in output:
+                return set()
+            raise StartError("Terraform state", "could not list Terraform state", output)
+        return {line.strip() for line in result.stdout.splitlines() if line.strip()}
+
+    def _verify_terraform_plan(self) -> None:
+        result = self._run_terraform(["plan", "-detailed-exitcode", "-var=kube_context=minikube"], timeout=300)
+        if result.returncode == 0:
+            self._record(True, "Terraform plan", "no foundation changes required")
+            return
+        if result.returncode == 2:
+            self._record(True, "Terraform plan", "foundation changes ready to apply")
+            return
+        raise StartError("Terraform plan", "Terraform plan failed", self._command_output(result))
+
+    def _run_terraform(self, args: list[str], *, timeout: int) -> CommandResult:
+        return self.runner.run(["terraform", "-chdir=terraform", *args], cwd=self.repo_root, timeout=timeout)
+
+    def _run_terraform_required(
+        self,
+        args: list[str],
+        step: str,
+        success_message: str,
+        *,
+        timeout: int,
+    ) -> CommandResult:
+        result = self._run_terraform(args, timeout=timeout)
+        if result.returncode != 0:
+            raise StartError(step, f"{step} failed", self._command_output(result))
+        self._record(True, step, success_message)
+        return result
 
     def _ensure_postgres_secret(self, namespace: str) -> None:
         exists = self.runner.run(
@@ -247,7 +332,7 @@ class Starter:
             return
 
         password = secrets.token_urlsafe(24)
-        database_url = f"postgresql://infrawatch:{password}@infrawatch-postgres:5432/infrawatch"
+        database_url = f"postgresql://infrawatch:{quote(password, safe='')}@infrawatch-postgres:5432/infrawatch"
         manifest = self.runner.run(
             [
                 "kubectl",
@@ -472,10 +557,19 @@ class Starter:
                 print(f"       Hint: {step.hint}")
 
     def _short_error(self, result: CommandResult) -> str:
+        return self._command_output(result, limit=240)
+
+    def _command_output(self, result: CommandResult, *, limit: int = 2000) -> str:
         output = (result.stderr or result.stdout or "").strip()
         if not output:
             return f"exit code {result.returncode}"
-        return output.splitlines()[-1][:240]
+        lines = []
+        for line in output.splitlines():
+            stripped = line.strip()
+            if stripped and not all(char in "╷╵│─┌┐└┘┬┴├┤┼" for char in stripped):
+                lines.append(stripped)
+        clean_output = "\n".join(lines[-12:]).strip() or output
+        return clean_output[:limit]
 
     def _url_reachable(self, url: str) -> bool:
         try:

@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 
 from app.config import Settings
 from app.main import create_app
+from app.repository import connect_postgres
 from app.schemas import MetricPoint, ServiceMetrics
 from app.services.observability import PrometheusClient
 
@@ -109,6 +110,30 @@ def test_unknown_deployment_delete_returns_404(tmp_path) -> None:
     audit_logs = client.get("/audit-logs")
     assert audit_logs.status_code == 200
     assert audit_logs.json()[0]["action"] == "deployment.delete_missing"
+
+
+def test_postgres_url_is_parsed_into_connection_kwargs(monkeypatch) -> None:
+    """PostgreSQL URLs should be passed to psycopg2 as explicit connection fields."""
+
+    captured: dict[str, object] = {}
+
+    def fake_connect(*args, **kwargs):
+        captured["args"] = args
+        captured["kwargs"] = kwargs
+        return object()
+
+    monkeypatch.setattr("app.repository.psycopg2.connect", fake_connect)
+
+    connect_postgres("postgresql://infrawatch:abc-123@infrawatch-postgres:5432/infrawatch")
+
+    assert captured["args"] == ()
+    assert captured["kwargs"] == {
+        "dbname": "infrawatch",
+        "user": "infrawatch",
+        "password": "abc-123",
+        "host": "infrawatch-postgres",
+        "port": 5432,
+    }
 
 
 def test_demo_rollback_is_audited_without_kubectl(tmp_path) -> None:
