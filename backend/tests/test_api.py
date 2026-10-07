@@ -1,6 +1,7 @@
 """API regression tests for the InfraWatch backend."""
 
 import asyncio
+import json
 
 from fastapi.testclient import TestClient
 
@@ -110,6 +111,116 @@ def test_unknown_deployment_delete_returns_404(tmp_path) -> None:
     audit_logs = client.get("/audit-logs")
     assert audit_logs.status_code == 200
     assert audit_logs.json()[0]["action"] == "deployment.delete_missing"
+
+
+def test_workload_health_uses_stored_state_when_kubectl_disabled(tmp_path) -> None:
+    """The workload endpoint should expose replica health without requiring kubectl in demo mode."""
+
+    client = build_client(tmp_path)
+    payload = {
+        "name": "catalog-api",
+        "image": "docker.io/example/catalog-api:latest",
+        "replicas": 2,
+        "port": 8080,
+    }
+
+    assert client.post("/deploy", json=payload).status_code == 202
+    response = client.get("/workloads/catalog-api")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["service"] == "catalog-api"
+    assert body["desired_replicas"] == 2
+    assert body["ready_replicas"] == 2
+    assert body["available_replicas"] == 2
+    assert body["unavailable_replicas"] == 0
+    assert body["pods"] == []
+    assert body["source"] == "stored"
+
+
+def test_unknown_workload_returns_404(tmp_path) -> None:
+    """A missing workload should return a clear 404."""
+
+    client = build_client(tmp_path)
+    response = client.get("/workloads/missing-api")
+
+    assert response.status_code == 404
+
+
+def test_workload_health_reads_live_kubernetes_payload(monkeypatch, tmp_path) -> None:
+    """The workload endpoint should expose live Deployment and Pod health when kubectl is enabled."""
+
+    settings = Settings(
+        environment="test",
+        state_file=str(tmp_path / "deployments.json"),
+        audit_file=str(tmp_path / "audit-log.json"),
+        execute_kubectl=True,
+        allow_mock_observability=True,
+    )
+
+    def fake_kubectl(_self, args: list[str], stdin: str | None = None, timeout: int = 45) -> str:
+        if "deployment/catalog-api" in args:
+            return json.dumps(
+                {
+                    "spec": {"replicas": 2},
+                    "status": {
+                        "updatedReplicas": 2,
+                        "readyReplicas": 1,
+                        "availableReplicas": 1,
+                        "unavailableReplicas": 1,
+                        "observedGeneration": 7,
+                    },
+                }
+            )
+        if "pods" in args:
+            return json.dumps(
+                {
+                    "items": [
+                        {
+                            "metadata": {"name": "catalog-api-healthy"},
+                            "status": {
+                                "phase": "Running",
+                                "containerStatuses": [{"ready": True, "restartCount": 0}],
+                            },
+                        },
+                        {
+                            "metadata": {"name": "catalog-api-waiting"},
+                            "status": {
+                                "phase": "Pending",
+                                "containerStatuses": [
+                                    {
+                                        "ready": False,
+                                        "restartCount": 2,
+                                        "state": {
+                                            "waiting": {
+                                                "reason": "ImagePullBackOff",
+                                                "message": "image pull failed",
+                                            }
+                                        },
+                                    }
+                                ],
+                            },
+                        },
+                    ]
+                }
+            )
+        raise AssertionError(f"unexpected kubectl args: {args}")
+
+    monkeypatch.setattr("app.services.deployments.DeploymentService._run_kubectl", fake_kubectl)
+    client = TestClient(create_app(settings))
+
+    response = client.get("/workloads/catalog-api")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["source"] == "kubernetes"
+    assert body["desired_replicas"] == 2
+    assert body["ready_replicas"] == 1
+    assert body["available_replicas"] == 1
+    assert body["unavailable_replicas"] == 1
+    assert body["observed_generation"] == 7
+    assert body["pods"][0]["ready"] is True
+    assert body["pods"][1]["reason"] == "ImagePullBackOff"
 
 
 def test_postgres_url_is_parsed_into_connection_kwargs(monkeypatch) -> None:

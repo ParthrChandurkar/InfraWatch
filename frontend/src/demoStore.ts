@@ -4,6 +4,7 @@ import type {
   DeploymentRecord,
   LogsResponse,
   ServiceMetrics,
+  WorkloadHealth,
 } from "./types";
 
 interface DemoState {
@@ -29,6 +30,8 @@ function createInitialState(): DemoState {
       url: "https://checkout.demo.internal",
       commit_sha: "7b2f9ad",
       message: "Rollout completed successfully in the public sandbox.",
+      ready_replicas: 3,
+      available_replicas: 3,
       created_at: minutesAgo(180),
       updated_at: minutesAgo(8),
     },
@@ -42,6 +45,8 @@ function createInitialState(): DemoState {
       url: "https://catalog.demo.internal",
       commit_sha: "95ce112",
       message: "Healthy across all replicas.",
+      ready_replicas: 2,
+      available_replicas: 2,
       created_at: minutesAgo(720),
       updated_at: minutesAgo(34),
     },
@@ -54,6 +59,8 @@ function createInitialState(): DemoState {
       status: "Pending",
       commit_sha: "c41a903",
       message: "Waiting for the rollout health gate.",
+      ready_replicas: 0,
+      available_replicas: 0,
       created_at: minutesAgo(24),
       updated_at: minutesAgo(3),
     },
@@ -118,6 +125,8 @@ export function deployDemoService(payload: DeployPayload): { deployment: Deploym
     status: "Running",
     url: `https://${payload.name}.demo.internal`,
     message: "Deployment completed in your private browser sandbox.",
+    ready_replicas: payload.replicas,
+    available_replicas: payload.replicas,
     created_at: existing?.created_at ?? now,
     updated_at: now,
   };
@@ -181,6 +190,32 @@ export function getDemoLogs(service: string): LogsResponse {
       { timestamp: minutesAgo(5), line: `[info] rollout is serving traffic on the configured port` },
       { timestamp: minutesAgo(9), line: `[info] deployment reconciled by InfraWatch` },
     ],
+  };
+}
+
+export function getDemoWorkloadHealth(service: string): WorkloadHealth {
+  const deployment = listDemoDeployments().find((item) => item.name === service);
+  const desired = deployment?.replicas ?? 0;
+  const ready = deployment?.ready_replicas ?? desired;
+  const available = deployment?.available_replicas ?? ready;
+  return {
+    service,
+    namespace: deployment?.namespace ?? "infrawatch",
+    desired_replicas: desired,
+    updated_replicas: ready,
+    ready_replicas: ready,
+    available_replicas: available,
+    unavailable_replicas: Math.max(desired - available, 0),
+    observed_generation: deployment?.observed_generation,
+    pods: Array.from({ length: desired }, (_, index) => ({
+      name: `${service}-demo-${index + 1}`,
+      phase: ready > index ? "Running" : "Pending",
+      ready: ready > index,
+      restart_count: 0,
+      reason: ready > index ? undefined : "Pending",
+      message: ready > index ? undefined : "Demo pod is waiting for simulated readiness.",
+    })),
+    source: "browser sandbox",
   };
 }
 

@@ -41,6 +41,28 @@ export interface ServiceMetrics {
   source: string;
 }
 
+export interface PodHealth {
+  name: string;
+  phase: string;
+  ready: boolean;
+  restart_count: number;
+  reason?: string;
+  message?: string;
+}
+
+export interface WorkloadHealth {
+  service: string;
+  namespace: string;
+  desired_replicas: number;
+  updated_replicas: number;
+  ready_replicas: number;
+  available_replicas: number;
+  unavailable_replicas: number;
+  observed_generation?: number;
+  pods: PodHealth[];
+  source: string;
+}
+
 export interface LogLine {
   timestamp: string;
   line: string;

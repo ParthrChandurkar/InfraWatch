@@ -20,7 +20,7 @@ import {
   Trash2,
   Zap,
 } from "lucide-react";
-import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Area,
   AreaChart,
@@ -36,6 +36,7 @@ import {
   deployService,
   getLogs,
   getMetrics,
+  getWorkloadHealth,
   isDemoMode,
   listAuditLogs,
   listDeployments,
@@ -49,6 +50,7 @@ import type {
   DeploymentStatus,
   LogsResponse,
   ServiceMetrics,
+  WorkloadHealth,
 } from "./types";
 
 const STATUS_THEME: Record<DeploymentStatus, { color: string; label: string; icon: ReactNode }> = {
@@ -83,12 +85,16 @@ function App() {
   const [deployments, setDeployments] = useState<DeploymentRecord[]>([]);
   const [selected, setSelected] = useState<string>("");
   const [metrics, setMetrics] = useState<ServiceMetrics>(EMPTY_METRICS);
+  const [workload, setWorkload] = useState<WorkloadHealth | null>(null);
   const [logs, setLogs] = useState<LogsResponse>(EMPTY_LOGS);
   const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isObservabilityLoading, setIsObservabilityLoading] = useState(false);
   const [isDeploying, setIsDeploying] = useState(false);
   const [usingApiFallback, setUsingApiFallback] = useState(isDemoMode);
   const [error, setError] = useState("");
+  const [observabilityError, setObservabilityError] = useState("");
+  const observabilityRequestActive = useRef(false);
   const [form, setForm] = useState({
     name: "catalog-api",
     image: "docker.io/example/catalog-api:latest",
@@ -132,12 +138,14 @@ function App() {
   }, []);
 
   const refreshObservability = useCallback(async (serviceName: string) => {
-    const [metricResponse, logResponse] = await Promise.all([
+    const [metricResponse, logResponse, workloadResponse] = await Promise.all([
       getMetrics(serviceName),
       getLogs(serviceName),
+      getWorkloadHealth(serviceName),
     ]);
     setMetrics(metricResponse);
     setLogs(logResponse);
+    setWorkload(workloadResponse);
   }, []);
 
   useEffect(() => {
@@ -155,19 +163,37 @@ function App() {
     if (!serviceName) {
       setMetrics(EMPTY_METRICS);
       setLogs(EMPTY_LOGS);
+      setWorkload(null);
+      setObservabilityError("");
       return;
     }
 
     let isMounted = true;
-    const load = () =>
-      refreshObservability(serviceName).catch((reason: Error) => {
+    const load = async () => {
+      if (observabilityRequestActive.current) {
+        return;
+      }
+      observabilityRequestActive.current = true;
+      setIsObservabilityLoading(true);
+      try {
+        await refreshObservability(serviceName);
         if (isMounted) {
-          setError(reason.message);
+          setObservabilityError("");
         }
-      });
+      } catch (reason) {
+        if (isMounted) {
+          setObservabilityError(reason instanceof Error ? reason.message : "Observability refresh failed");
+        }
+      } finally {
+        observabilityRequestActive.current = false;
+        if (isMounted) {
+          setIsObservabilityLoading(false);
+        }
+      }
+    };
 
     load();
-    const timer = window.setInterval(load, 5000);
+    const timer = window.setInterval(load, 7000);
     return () => {
       isMounted = false;
       window.clearInterval(timer);
@@ -264,20 +290,11 @@ function App() {
       })),
     [metrics],
   );
-  const chartData = useMemo(
-    () =>
-      liveChartData.length
-        ? liveChartData
-        : selectedDeployment && isBrowserFallback
-          ? buildDemoChartData(selectedDeployment.name)
-          : [],
-    [isBrowserFallback, liveChartData, selectedDeployment],
-  );
+  const chartData = liveChartData;
+  const hasMetricData = chartData.length > 0;
   const telemetryMode = liveChartData.length
     ? sourceLabel(metrics.source)
-    : selectedDeployment && isBrowserFallback
-      ? "Demo baseline"
-      : selectedDeployment
+    : selectedDeployment
         ? "No live data"
         : "Waiting";
 
@@ -302,6 +319,11 @@ function App() {
       avgCpu: averageValue(chartData.map((item) => Number(item.cpu))),
     };
   }, [chartData, summary.Deploying, summary.Failed, summary.Pending]);
+
+  const workloadDesired = workload?.desired_replicas ?? selectedDeployment?.replicas ?? 0;
+  const workloadReady = workload?.ready_replicas ?? selectedDeployment?.ready_replicas ?? 0;
+  const workloadAvailable = workload?.available_replicas ?? selectedDeployment?.available_replicas ?? 0;
+  const workloadUnavailable = workload?.unavailable_replicas ?? Math.max(workloadDesired - workloadAvailable, 0);
 
   const healthTone = telemetry.healthScore >= 90 ? "excellent" : telemetry.healthScore >= 70 ? "steady" : "attention";
   const activeRolloutCount = summary.Pending + summary.Deploying;
@@ -491,6 +513,7 @@ function App() {
         {isDemoMode && <DemoModeBanner />}
 
         {error && <div className="error-banner">{error}</div>}
+        {observabilityError && <div className="error-banner">Observability unavailable: {observabilityError}</div>}
 
         <section className={`hero-console ${healthTone}`} id="overview" aria-label="InfraWatch overview">
           <div className="hero-copy">
@@ -581,14 +604,34 @@ function App() {
             <div className="service-facts">
               <Fact icon={<Layers size={17} />} label="Image" value={selectedDeployment?.image ?? "Waiting for deployment"} />
               <Fact icon={<Server size={17} />} label="Namespace" value={selectedDeployment?.namespace ?? "infrawatch"} />
-              <Fact icon={<Zap size={17} />} label="Replicas" value={String(selectedDeployment?.replicas ?? 0)} />
+              <Fact icon={<Zap size={17} />} label="Desired replicas" value={String(workloadDesired)} />
               <Fact
                 icon={<CheckCircle2 size={17} />}
                 label="Ready pods"
-                value={selectedDeployment ? `${selectedDeployment.ready_replicas ?? 0}/${selectedDeployment.replicas}` : "0/0"}
+                value={`${workloadReady}/${workloadDesired}`}
               />
+              <Fact icon={<Activity size={17} />} label="Available replicas" value={String(workloadAvailable)} />
+              <Fact icon={<AlertTriangle size={17} />} label="Unavailable replicas" value={String(workloadUnavailable)} />
               <Fact icon={<Clock size={17} />} label="Updated" value={selectedDeployment ? relativeTime(selectedDeployment.updated_at) : "Not available"} />
             </div>
+            <div className="workload-health-strip" aria-label="Kubernetes workload health">
+              <span>Workload source: {workload ? sourceLabel(workload.source) : "Waiting"}</span>
+              <span>Updated: {workload?.updated_replicas ?? 0}</span>
+              <span>Observed generation: {workload?.observed_generation ?? "n/a"}</span>
+            </div>
+            {workload?.pods.length ? (
+              <div className="pod-health-list" aria-label="Pod health">
+                {workload.pods.map((pod) => (
+                  <div className={`pod-health ${pod.ready ? "ready" : "problem"}`} key={pod.name}>
+                    <strong>{pod.name}</strong>
+                    <span>{pod.phase} / {pod.ready ? "Ready" : pod.reason ?? "Not ready"}</span>
+                    <small>{pod.restart_count} restart{pod.restart_count === 1 ? "" : "s"}</small>
+                  </div>
+                ))}
+              </div>
+            ) : selectedDeployment ? (
+              <div className="telemetry-notice">Pod-level details are not available yet for this workload.</div>
+            ) : null}
             {selectedDeployment?.last_failure && (
               <div className="rollout-failure">
                 <AlertTriangle size={16} />
@@ -690,10 +733,29 @@ function App() {
             </div>
           </section>
 
-          <MetricChart area="cpu-card" title="CPU Allocation" value={`${telemetry.cpu.toFixed(2)} cores`} data={chartData} dataKey="cpu" color="#4da3ff" icon={<Cpu size={18} />} />
-          <MetricChart area="memory-card" title="Memory Pressure" value={`${Math.round(telemetry.memory)} MB`} data={chartData} dataKey="memory" color="#3ddc97" icon={<HardDrive size={18} />} />
-          <MetricChart area="requests-card" title="Request Throughput" value={`${telemetry.requests.toFixed(1)} rps`} data={chartData} dataKey="requests" color="#b38cff" icon={<Activity size={18} />} />
-          <MetricChart area="errors-card" title="Error Rate" value={`${telemetry.errors.toFixed(2)} rps`} data={chartData} dataKey="errors" color="#ff6b7a" icon={<AlertTriangle size={18} />} />
+          <section className="panel telemetry-status-panel">
+            <div className="panel-heading">
+              <div>
+                <span className="section-kicker">Real Metrics</span>
+                <h2>Prometheus-backed service telemetry</h2>
+                <p>
+                  {metrics.source === "prometheus"
+                    ? "Showing real Prometheus data through the FastAPI metrics endpoint and Redis cache."
+                    : metrics.source === "mock" || metrics.source === "browser sandbox"
+                      ? "Showing fallback telemetry. This is not real Prometheus data."
+                      : isObservabilityLoading
+                        ? "Loading service telemetry from the backend."
+                        : "No metric series is currently available for the selected service."}
+                </p>
+              </div>
+              <span className="data-source">{isObservabilityLoading ? "Refreshing" : telemetryMode}</span>
+            </div>
+          </section>
+
+          <MetricChart area="cpu-card" title="CPU Usage" value={hasMetricData ? `${telemetry.cpu.toFixed(2)} cores` : "No data"} data={chartData} dataKey="cpu" color="#4da3ff" icon={<Cpu size={18} />} />
+          <MetricChart area="memory-card" title="Memory Usage" value={hasMetricData ? `${Math.round(telemetry.memory)} MB` : "No data"} data={chartData} dataKey="memory" color="#3ddc97" icon={<HardDrive size={18} />} />
+          <MetricChart area="requests-card" title="Request Rate" value={hasMetricData ? `${telemetry.requests.toFixed(1)} rps` : "No data"} data={chartData} dataKey="requests" color="#b38cff" icon={<Activity size={18} />} />
+          <MetricChart area="errors-card" title="Error Rate" value={hasMetricData ? `${telemetry.errors.toFixed(2)} rps` : "No data"} data={chartData} dataKey="errors" color="#ff6b7a" icon={<AlertTriangle size={18} />} />
 
           <section className="panel fleet-panel" id="workloads">
             <div className="panel-heading">
@@ -709,7 +771,7 @@ function App() {
                   <tr>
                     <th>Service</th>
                     <th>Status</th>
-                    <th>Replicas</th>
+                    <th>Ready / desired</th>
                     <th>Image</th>
                     <th>Updated</th>
                     <th />
@@ -724,7 +786,7 @@ function App() {
                         </button>
                       </td>
                       <td><StatusPill status={deployment.status} /></td>
-                      <td>{deployment.replicas}</td>
+                      <td>{deployment.ready_replicas ?? 0}/{deployment.replicas}</td>
                       <td className="image-cell">{deployment.image}</td>
                       <td>{relativeTime(deployment.updated_at)}</td>
                       <td>
@@ -933,24 +995,28 @@ function MetricChart({
         </div>
         <div className="metric-icon" style={{ color }}>{icon}</div>
       </div>
-      <ResponsiveContainer width="100%" height={170}>
-        <AreaChart data={data}>
-          <defs>
-            <linearGradient id={`gradient-${dataKey}`} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor={color} stopOpacity={0.35} />
-              <stop offset="95%" stopColor={color} stopOpacity={0.02} />
-            </linearGradient>
-          </defs>
-          <CartesianGrid stroke="#27313c" strokeDasharray="3 3" vertical={false} />
-          <XAxis dataKey="time" tick={{ fill: "#9aa4b2", fontSize: 11 }} stroke="#354252" />
-          <YAxis tick={{ fill: "#9aa4b2", fontSize: 11 }} stroke="#354252" width={42} />
-          <Tooltip
-            contentStyle={{ background: "#121821", border: "1px solid #303b48", borderRadius: 8, color: "#f4f7fb" }}
-            labelStyle={{ color: "#f4f7fb" }}
-          />
-          <Area type="monotone" dataKey={dataKey} stroke={color} strokeWidth={2.4} fill={`url(#gradient-${dataKey})`} dot={false} />
-        </AreaChart>
-      </ResponsiveContainer>
+      {data.length ? (
+        <ResponsiveContainer width="100%" height={170}>
+          <AreaChart data={data}>
+            <defs>
+              <linearGradient id={`gradient-${dataKey}`} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor={color} stopOpacity={0.35} />
+                <stop offset="95%" stopColor={color} stopOpacity={0.02} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid stroke="#27313c" strokeDasharray="3 3" vertical={false} />
+            <XAxis dataKey="time" tick={{ fill: "#9aa4b2", fontSize: 11 }} stroke="#354252" />
+            <YAxis tick={{ fill: "#9aa4b2", fontSize: 11 }} stroke="#354252" width={42} />
+            <Tooltip
+              contentStyle={{ background: "#121821", border: "1px solid #303b48", borderRadius: 8, color: "#f4f7fb" }}
+              labelStyle={{ color: "#f4f7fb" }}
+            />
+            <Area type="monotone" dataKey={dataKey} stroke={color} strokeWidth={2.4} fill={`url(#gradient-${dataKey})`} dot={false} />
+          </AreaChart>
+        </ResponsiveContainer>
+      ) : (
+        <div className="metric-empty">No Prometheus series is available for this metric yet.</div>
+      )}
     </section>
   );
 }
@@ -981,25 +1047,6 @@ function formatAuditAction(action: string) {
     .map((part) => part.replace(/_/g, " "))
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
-}
-
-function buildDemoChartData(serviceName: string) {
-  const seed = serviceName.split("").reduce((total, char) => total + char.charCodeAt(0), 0);
-  const now = Date.now();
-  return Array.from({ length: 12 }, (_, index) => {
-    const wave = Math.sin((index + seed) / 2.2);
-    const drift = Math.cos((index + seed) / 3.5);
-    return {
-      time: new Date(now - (11 - index) * 60_000).toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-      }),
-      cpu: Number((0.24 + Math.abs(wave) * 0.19).toFixed(2)),
-      memory: Math.round(220 + Math.abs(drift) * 96 + (seed % 37)),
-      requests: Number((18 + Math.abs(wave) * 28 + (seed % 9)).toFixed(1)),
-      errors: Number((Math.abs(drift) * 0.08).toFixed(2)),
-    };
-  });
 }
 
 function relativeTime(value: string) {

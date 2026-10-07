@@ -696,6 +696,7 @@ a {
   grid-template-columns: repeat(4, minmax(0, 1fr));
   grid-template-areas:
     "service service deploy flow"
+    "telemetry telemetry telemetry telemetry"
     "cpu memory requests errors"
     "fleet fleet logs logs"
     "fleet fleet audit readiness";
@@ -713,6 +714,10 @@ a {
 
 .flow-panel {
   grid-area: flow;
+}
+
+.telemetry-status-panel {
+  grid-area: telemetry;
 }
 
 .cpu-card {
@@ -897,6 +902,75 @@ a {
   white-space: nowrap;
 }
 
+.workload-health-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.workload-health-strip span,
+.pod-health,
+.telemetry-notice {
+  border: 1px solid #2d3743;
+  border-radius: 10px;
+  background: #0c121a;
+  color: #aeb9c8;
+  font-size: 12px;
+}
+
+.workload-health-strip span {
+  padding: 7px 10px;
+  font-weight: 800;
+}
+
+.pod-health-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+  margin-top: 12px;
+}
+
+.pod-health {
+  padding: 10px;
+  border-left: 3px solid #f1c75b;
+}
+
+.pod-health.ready {
+  border-left-color: #3ddc97;
+}
+
+.pod-health.problem {
+  border-left-color: #ff6b7a;
+}
+
+.pod-health strong,
+.pod-health span,
+.pod-health small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pod-health strong {
+  color: #f4f7fb;
+}
+
+.pod-health span {
+  margin-top: 4px;
+}
+
+.pod-health small {
+  margin-top: 5px;
+  color: #9aa4b2;
+}
+
+.telemetry-notice {
+  margin-top: 12px;
+  padding: 10px 12px;
+}
+
 .rollout-failure {
   display: flex;
   gap: 9px;
@@ -975,6 +1049,13 @@ a {
   min-height: 250px;
 }
 
+.telemetry-status-panel {
+  border-color: rgba(77, 163, 255, 0.28);
+  background:
+    radial-gradient(circle at top right, rgba(77, 163, 255, 0.1), transparent 35%),
+    #121821;
+}
+
 .flow-list {
   display: flex;
   flex-direction: column;
@@ -1037,6 +1118,19 @@ a {
 .metric-icon {
   width: 38px;
   height: 38px;
+}
+
+.metric-empty {
+  display: grid;
+  place-items: center;
+  min-height: 170px;
+  border: 1px dashed #354252;
+  border-radius: 12px;
+  background: #0c1117;
+  color: #9aa4b2;
+  padding: 16px;
+  text-align: center;
+  line-height: 1.45;
 }
 
 .table-wrap {
@@ -1281,11 +1375,12 @@ td {
     grid-template-areas:
       "service service"
       "deploy flow"
+      "telemetry telemetry"
       "cpu memory"
       "requests errors"
       "fleet fleet"
       "logs logs"
-      "audit audit";
+      "audit readiness";
   }
 }
 
@@ -1345,6 +1440,7 @@ td {
       "service"
       "deploy"
       "flow"
+      "telemetry"
       "cpu"
       "memory"
       "requests"

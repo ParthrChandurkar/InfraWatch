@@ -105,6 +105,32 @@ class ServiceMetrics(BaseModel):
     source: str
 
 
+class PodHealth(BaseModel):
+    """One Kubernetes pod health summary for a service workload."""
+
+    name: str
+    phase: str
+    ready: bool
+    restart_count: int = 0
+    reason: str | None = None
+    message: str | None = None
+
+
+class WorkloadHealth(BaseModel):
+    """Kubernetes Deployment and Pod health for one service."""
+
+    service: str
+    namespace: str
+    desired_replicas: int
+    updated_replicas: int
+    ready_replicas: int
+    available_replicas: int
+    unavailable_replicas: int
+    observed_generation: int | None = None
+    pods: list[PodHealth] = Field(default_factory=list)
+    source: str
+
+
 class LogLine(BaseModel):
     """Single log event returned from Loki or demo fallback data."""
 

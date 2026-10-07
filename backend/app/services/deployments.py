@@ -14,7 +14,14 @@ import yaml
 
 from app.config import Settings
 from app.repository import AuditLogRepository, DeploymentRepository, utc_now
-from app.schemas import DeploymentRecord, DeploymentRequest, DeploymentResponse, DeploymentStatus
+from app.schemas import (
+    DeploymentRecord,
+    DeploymentRequest,
+    DeploymentResponse,
+    DeploymentStatus,
+    PodHealth,
+    WorkloadHealth,
+)
 
 
 class DeploymentExecutionError(RuntimeError):
@@ -43,6 +50,53 @@ class DeploymentService:
         """List newest audit log entries."""
 
         return self._audit_repository.list(limit=limit)
+
+    def workload_health(self, name: str) -> WorkloadHealth | None:
+        """Return read-only Kubernetes Deployment and Pod health for one known service."""
+
+        existing = self._repository.get(name)
+        namespace = existing.namespace if existing else self._settings.kubectl_namespace
+        if not self._settings.execute_kubectl:
+            if existing is None:
+                return None
+            return WorkloadHealth(
+                service=existing.name,
+                namespace=existing.namespace,
+                desired_replicas=existing.replicas,
+                updated_replicas=existing.ready_replicas or existing.available_replicas,
+                ready_replicas=existing.ready_replicas,
+                available_replicas=existing.available_replicas,
+                unavailable_replicas=max(existing.replicas - existing.available_replicas, 0),
+                observed_generation=existing.observed_generation,
+                pods=[],
+                source="stored",
+            )
+
+        try:
+            deployment = self._read_deployment_payload(name, namespace)
+        except DeploymentExecutionError:
+            if existing is None:
+                return None
+            raise
+        spec = deployment.get("spec", {})
+        status = deployment.get("status", {})
+        desired = int(spec.get("replicas", 0) or 0)
+        updated = int(status.get("updatedReplicas", 0) or 0)
+        ready = int(status.get("readyReplicas", 0) or 0)
+        available = int(status.get("availableReplicas", 0) or 0)
+        unavailable = int(status.get("unavailableReplicas", max(desired - available, 0)) or 0)
+        return WorkloadHealth(
+            service=name,
+            namespace=namespace,
+            desired_replicas=desired,
+            updated_replicas=updated,
+            ready_replicas=ready,
+            available_replicas=available,
+            unavailable_replicas=unavailable,
+            observed_generation=status.get("observedGeneration"),
+            pods=self._read_pod_health(name, namespace),
+            source="kubernetes",
+        )
 
     def deploy(self, request: DeploymentRequest) -> DeploymentResponse:
         """Create or update Kubernetes resources for a service."""
@@ -408,6 +462,17 @@ class DeploymentService:
     def _read_deployment_state(self, name: str, namespace: str) -> dict[str, int | None]:
         """Read Kubernetes Deployment status fields used by the dashboard."""
 
+        payload = self._read_deployment_payload(name, namespace)
+        status = payload.get("status", {})
+        return {
+            "ready_replicas": int(status.get("readyReplicas", 0)),
+            "available_replicas": int(status.get("availableReplicas", 0)),
+            "observed_generation": status.get("observedGeneration"),
+        }
+
+    def _read_deployment_payload(self, name: str, namespace: str) -> dict[str, Any]:
+        """Read the raw Kubernetes Deployment payload for a service."""
+
         output = self._run_kubectl(
             [
                 "get",
@@ -418,13 +483,54 @@ class DeploymentService:
                 "json",
             ]
         )
+        return json.loads(output)
+
+    def _read_pod_health(self, name: str, namespace: str) -> list[PodHealth]:
+        """Read pod phase/readiness/restart details for one service."""
+
+        output = self._run_kubectl(
+            [
+                "get",
+                "pods",
+                "--namespace",
+                namespace,
+                "-l",
+                f"app.kubernetes.io/name={name}",
+                "-o",
+                "json",
+            ]
+        )
         payload = json.loads(output)
-        status = payload.get("status", {})
-        return {
-            "ready_replicas": int(status.get("readyReplicas", 0)),
-            "available_replicas": int(status.get("availableReplicas", 0)),
-            "observed_generation": status.get("observedGeneration"),
-        }
+        pods: list[PodHealth] = []
+        for item in payload.get("items", []):
+            metadata = item.get("metadata", {})
+            status = item.get("status", {})
+            container_statuses = status.get("containerStatuses", [])
+            ready = bool(container_statuses) and all(bool(container.get("ready")) for container in container_statuses)
+            restart_count = sum(int(container.get("restartCount", 0) or 0) for container in container_statuses)
+            reason = status.get("reason")
+            message = status.get("message")
+            for container in container_statuses:
+                state = container.get("state", {})
+                waiting = state.get("waiting")
+                terminated = state.get("terminated")
+                if waiting:
+                    reason = waiting.get("reason", reason)
+                    message = waiting.get("message", message)
+                elif terminated:
+                    reason = terminated.get("reason", reason)
+                    message = terminated.get("message", message)
+            pods.append(
+                PodHealth(
+                    name=metadata.get("name", "unknown-pod"),
+                    phase=status.get("phase", "Unknown"),
+                    ready=ready,
+                    restart_count=restart_count,
+                    reason=reason,
+                    message=message,
+                )
+            )
+        return pods
 
     def _pod_failure_summary(self, name: str, namespace: str) -> str:
         """Inspect pods for common rollout failure reasons."""

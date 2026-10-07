@@ -14,6 +14,7 @@ from app.schemas import (
     DeploymentResponse,
     LogsResponse,
     ServiceMetrics,
+    WorkloadHealth,
 )
 from app.services.deployments import DeploymentExecutionError
 
@@ -87,6 +88,19 @@ def build_router() -> APIRouter:
                     status_code=status.HTTP_502_BAD_GATEWAY,
                     detail="Unable to read metrics from Prometheus",
                 ) from exc
+
+    @router.get("/workloads/{service}", response_model=WorkloadHealth, tags=["observability"])
+    async def workload(service: str, request: Request) -> WorkloadHealth:
+        """Return Kubernetes Deployment and Pod health for dashboard workload cards."""
+
+        with REQUEST_TIMER.labels(route="/workloads/{service}").time():
+            try:
+                workload_health = request.app.state.deployment_service.workload_health(service)
+            except DeploymentExecutionError as exc:
+                raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+            if workload_health is None:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workload not found")
+            return workload_health
 
     @router.get("/logs/{service}", response_model=LogsResponse, tags=["observability"])
     async def logs(service: str, request: Request) -> LogsResponse:

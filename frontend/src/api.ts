@@ -1,10 +1,11 @@
 // Thin API wrapper around the InfraWatch backend REST endpoints.
-import type { AuditLogEntry, DeployPayload, DeploymentRecord, LogsResponse, ServiceMetrics } from "./types";
+import type { AuditLogEntry, DeployPayload, DeploymentRecord, LogsResponse, ServiceMetrics, WorkloadHealth } from "./types";
 import {
   deleteDemoDeployment,
   deployDemoService,
   getDemoLogs,
   getDemoMetrics,
+  getDemoWorkloadHealth,
   listDemoAuditLogs,
   listDemoDeployments,
   resetDemoState,
@@ -121,6 +122,13 @@ export function getMetrics(service: string): Promise<ServiceMetrics> {
   return withDemoFallback(
     () => request<ServiceMetrics>(`/metrics/${service}`),
     () => getDemoMetrics(service),
+  );
+}
+
+export function getWorkloadHealth(service: string): Promise<WorkloadHealth> {
+  return withDemoFallback(
+    () => request<WorkloadHealth>(`/workloads/${service}`),
+    () => getDemoWorkloadHealth(service),
   );
 }
 
