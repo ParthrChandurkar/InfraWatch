@@ -94,6 +94,10 @@ function App() {
   const [usingApiFallback, setUsingApiFallback] = useState(isDemoMode);
   const [error, setError] = useState("");
   const [observabilityError, setObservabilityError] = useState("");
+  const [logError, setLogError] = useState("");
+  const [logSearch, setLogSearch] = useState("");
+  const [logPodFilter, setLogPodFilter] = useState("");
+  const [logWindowMinutes, setLogWindowMinutes] = useState(15);
   const observabilityRequestActive = useRef(false);
   const [form, setForm] = useState({
     name: "catalog-api",
@@ -137,15 +141,37 @@ function App() {
     setAuditLogs(entries);
   }, []);
 
-  const refreshObservability = useCallback(async (serviceName: string) => {
-    const [metricResponse, logResponse, workloadResponse] = await Promise.all([
+  const refreshObservability = useCallback(async (
+    serviceName: string,
+    logOptions: { search?: string; pod?: string; minutes?: number } = {},
+  ) => {
+    const [metricResult, logResult, workloadResult] = await Promise.allSettled([
       getMetrics(serviceName),
-      getLogs(serviceName),
+      getLogs(serviceName, { ...logOptions, limit: 100 }),
       getWorkloadHealth(serviceName),
     ]);
-    setMetrics(metricResponse);
-    setLogs(logResponse);
-    setWorkload(workloadResponse);
+
+    const failures: string[] = [];
+    if (metricResult.status === "fulfilled") {
+      setMetrics(metricResult.value);
+    } else {
+      failures.push("metrics");
+    }
+    if (logResult.status === "fulfilled") {
+      setLogs(logResult.value);
+      setLogError("");
+    } else {
+      setLogs({ service: serviceName, lines: [], source: "unavailable" });
+      setLogError(logResult.reason instanceof Error ? logResult.reason.message : "Loki is unavailable");
+    }
+    if (workloadResult.status === "fulfilled") {
+      setWorkload(workloadResult.value);
+    } else {
+      failures.push("workload health");
+    }
+    if (failures.length) {
+      throw new Error(`Unable to refresh ${failures.join(" and ")}`);
+    }
   }, []);
 
   useEffect(() => {
@@ -165,6 +191,7 @@ function App() {
       setLogs(EMPTY_LOGS);
       setWorkload(null);
       setObservabilityError("");
+      setLogError("");
       return;
     }
 
@@ -176,7 +203,11 @@ function App() {
       observabilityRequestActive.current = true;
       setIsObservabilityLoading(true);
       try {
-        await refreshObservability(serviceName);
+        await refreshObservability(serviceName, {
+          search: logSearch,
+          pod: logPodFilter,
+          minutes: logWindowMinutes,
+        });
         if (isMounted) {
           setObservabilityError("");
         }
@@ -198,7 +229,7 @@ function App() {
       isMounted = false;
       window.clearInterval(timer);
     };
-  }, [refreshObservability, selectedDeployment?.name]);
+  }, [logPodFilter, logSearch, logWindowMinutes, refreshObservability, selectedDeployment?.name]);
 
   async function handleRefresh() {
     setError("");
@@ -206,7 +237,11 @@ function App() {
       await refreshDeployments();
       await refreshAuditLogs();
       if (selectedDeployment?.name) {
-        await refreshObservability(selectedDeployment.name);
+        await refreshObservability(selectedDeployment.name, {
+          search: logSearch,
+          pod: logPodFilter,
+          minutes: logWindowMinutes,
+        });
       }
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Refresh failed");
@@ -324,6 +359,12 @@ function App() {
   const workloadReady = workload?.ready_replicas ?? selectedDeployment?.ready_replicas ?? 0;
   const workloadAvailable = workload?.available_replicas ?? selectedDeployment?.available_replicas ?? 0;
   const workloadUnavailable = workload?.unavailable_replicas ?? Math.max(workloadDesired - workloadAvailable, 0);
+  const logPodOptions = useMemo(() => {
+    const names = new Set<string>();
+    workload?.pods.forEach((pod) => names.add(pod.name));
+    logs.lines.forEach((entry) => entry.pod && names.add(entry.pod));
+    return Array.from(names).sort();
+  }, [logs.lines, workload?.pods]);
 
   const healthTone = telemetry.healthScore >= 90 ? "excellent" : telemetry.healthScore >= 70 ? "steady" : "attention";
   const activeRolloutCount = summary.Pending + summary.Deploying;
@@ -820,21 +861,80 @@ function App() {
             <div className="panel-heading">
               <div>
                 <span className="section-kicker">Runtime Logs</span>
-                <h2><Terminal size={18} /> Live Stream</h2>
+                <h2><Terminal size={18} /> Loki-backed Kubernetes logs</h2>
               </div>
               <span className="data-source">{sourceLabel(logs.source)}</span>
             </div>
+            <div className="log-toolbar">
+              <label>
+                Search
+                <input
+                  aria-label="Search logs"
+                  value={logSearch}
+                  onChange={(event) => setLogSearch(event.target.value)}
+                  placeholder="Filter log text"
+                />
+              </label>
+              <label>
+                Pod
+                <select
+                  aria-label="Filter logs by pod"
+                  value={logPodFilter}
+                  onChange={(event) => setLogPodFilter(event.target.value)}
+                >
+                  <option value="">All pods</option>
+                  {logPodOptions.map((pod) => (
+                    <option value={pod} key={pod}>{pod}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Window
+                <select
+                  aria-label="Log time window"
+                  value={logWindowMinutes}
+                  onChange={(event) => setLogWindowMinutes(Number(event.target.value))}
+                >
+                  <option value={5}>Last 5m</option>
+                  <option value={15}>Last 15m</option>
+                  <option value={30}>Last 30m</option>
+                  <option value={60}>Last 60m</option>
+                </select>
+              </label>
+              <button type="button" onClick={handleRefresh} disabled={isObservabilityLoading}>
+                <RefreshCw size={14} />
+                Refresh
+              </button>
+            </div>
+            {logError && (
+              <div className="log-state unavailable">
+                Loki logs are temporarily unavailable: {logError}
+              </div>
+            )}
+            {!logError && logs.source === "mock" && (
+              <div className="log-state simulated">Showing simulated backend logs, not Loki data.</div>
+            )}
+            {!logError && logs.source === "browser sandbox" && (
+              <div className="log-state simulated">Showing browser sandbox logs, not Loki data.</div>
+            )}
             <div className="log-viewer">
               {logs.lines.map((entry) => (
                 <div className="log-line" key={`${entry.timestamp}-${entry.line}`}>
                   <time>{new Date(entry.timestamp).toLocaleTimeString()}</time>
-                  <code>{entry.line}</code>
+                  <div>
+                    <div className="log-context">
+                      <span>{entry.pod ?? selectedDeployment?.name ?? "unknown pod"}</span>
+                      {entry.container && <span>{entry.container}</span>}
+                      {entry.namespace && <span>{entry.namespace}</span>}
+                    </div>
+                    <code>{entry.line}</code>
+                  </div>
                 </div>
               ))}
-              {!logs.lines.length && (
+              {!logs.lines.length && !logError && (
                 <div className="empty-log">
                   <Terminal size={18} />
-                  <span>Waiting for log events</span>
+                  <span>No logs found for the selected service, filters, and time window.</span>
                 </div>
               )}
             </div>
@@ -1024,6 +1124,12 @@ function MetricChart({
 function sourceLabel(source: string) {
   if (source === "mock") {
     return "Simulated telemetry";
+  }
+  if (source === "loki") {
+    return "Loki";
+  }
+  if (source === "unavailable") {
+    return "Unavailable";
   }
   if (source === "empty") {
     return "Waiting";

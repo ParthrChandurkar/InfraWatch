@@ -136,6 +136,10 @@ class LogLine(BaseModel):
 
     timestamp: str
     line: str
+    namespace: str | None = None
+    pod: str | None = None
+    container: str | None = None
+    labels: dict[str, str] = Field(default_factory=dict)
 
 
 class LogsResponse(BaseModel):

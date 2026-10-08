@@ -44,7 +44,7 @@ class Settings(BaseSettings):
 
     prometheus_url: str = "http://prometheus:9090"
     loki_url: str = "http://loki:3100"
-    observability_timeout_seconds: float = 4.0
+    observability_timeout_seconds: float = 10.0
     allow_mock_observability: bool = True
     redis_url: str | None = Field(
         default=None,

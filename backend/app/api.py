@@ -103,12 +103,27 @@ def build_router() -> APIRouter:
             return workload_health
 
     @router.get("/logs/{service}", response_model=LogsResponse, tags=["observability"])
-    async def logs(service: str, request: Request) -> LogsResponse:
+    async def logs(
+        service: str,
+        request: Request,
+        search: str | None = Query(default=None, max_length=200),
+        pod: str | None = Query(default=None, min_length=1, max_length=253),
+        container: str | None = Query(default=None, min_length=1, max_length=253),
+        minutes: int = Query(default=15, ge=1, le=60),
+        limit: int = Query(default=100, ge=1, le=500),
+    ) -> LogsResponse:
         """Return recent Loki log lines for a service."""
 
         with REQUEST_TIMER.labels(route="/logs/{service}").time():
             try:
-                return await request.app.state.loki_client.logs(service)
+                return await request.app.state.loki_client.logs(
+                    service,
+                    limit=limit,
+                    minutes=minutes,
+                    search=search,
+                    pod=pod,
+                    container=container,
+                )
             except Exception as exc:
                 raise HTTPException(
                     status_code=status.HTTP_502_BAD_GATEWAY,

@@ -3,13 +3,14 @@
 import asyncio
 import json
 
+import httpx
 from fastapi.testclient import TestClient
 
 from app.config import Settings
 from app.main import create_app
 from app.repository import connect_postgres
 from app.schemas import MetricPoint, ServiceMetrics
-from app.services.observability import PrometheusClient
+from app.services.observability import LokiClient, PrometheusClient
 
 
 class FakeRedis:
@@ -37,6 +38,51 @@ class FakeRedis:
         self.values[key] = value
         self.setex_calls.append((key, ttl, value))
         return True
+
+
+class FakeHttpResponse:
+    """Minimal httpx-like response for Loki tests."""
+
+    def __init__(self, payload: dict, *, status_code: int = 200) -> None:
+        self.payload = payload
+        self.status_code = status_code
+
+    def raise_for_status(self) -> None:
+        """Raise an HTTP error for non-success status codes."""
+
+        if self.status_code >= 400:
+            raise httpx.HTTPStatusError("loki error", request=httpx.Request("GET", "http://loki"), response=None)
+
+    def json(self) -> dict:
+        """Return the fake JSON payload."""
+
+        return self.payload
+
+
+class FakeAsyncClient:
+    """Small async client fake used by Loki tests."""
+
+    payload: dict = {}
+    status_code = 200
+    raised: Exception | None = None
+    calls: list[dict] = []
+
+    def __init__(self, *args, **kwargs) -> None:
+        pass
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, traceback) -> None:
+        return None
+
+    async def get(self, url: str, params: dict):
+        """Capture the request and return a fake response."""
+
+        self.calls.append({"url": url, "params": params})
+        if self.raised:
+            raise self.raised
+        return FakeHttpResponse(self.payload, status_code=self.status_code)
 
 
 def build_client(tmp_path) -> TestClient:
@@ -289,6 +335,131 @@ def test_demo_runtime_can_seed_sample_services(tmp_path) -> None:
         "checkout-api",
         "payments-worker",
     }
+
+
+def loki_payload(*streams: dict) -> dict:
+    """Build a Loki query_range payload for tests."""
+
+    return {"status": "success", "data": {"result": list(streams)}}
+
+
+def test_loki_logs_are_normalized_from_real_stream_labels(monkeypatch) -> None:
+    """Loki streams should become frontend-friendly log entries with pod metadata."""
+
+    FakeAsyncClient.payload = loki_payload(
+        {
+            "stream": {
+                "namespace": "infrawatch",
+                "app": "infrawatch-backend",
+                "pod": "infrawatch-backend-abc",
+                "container": "backend",
+            },
+            "values": [["1700000000000000000", "GET /healthz 200"]],
+        }
+    )
+    FakeAsyncClient.raised = None
+    FakeAsyncClient.status_code = 200
+    FakeAsyncClient.calls = []
+    monkeypatch.setattr("app.services.observability.httpx.AsyncClient", FakeAsyncClient)
+
+    client = LokiClient(Settings(environment="test", allow_mock_observability=False))
+    logs = asyncio.run(client.logs("infrawatch-backend", limit=25, search="healthz", pod="infrawatch-backend-abc"))
+
+    assert logs.source == "loki"
+    assert logs.lines[0].line == "GET /healthz 200"
+    assert logs.lines[0].namespace == "infrawatch"
+    assert logs.lines[0].pod == "infrawatch-backend-abc"
+    assert logs.lines[0].container == "backend"
+    assert logs.lines[0].labels["app"] == "infrawatch-backend"
+    params = FakeAsyncClient.calls[0]["params"]
+    assert params["limit"] == 25
+    assert 'app="infrawatch-backend"' in params["query"]
+    assert 'pod="infrawatch-backend-abc"' in params["query"]
+    assert '|= "healthz"' in params["query"]
+    assert params["end"] > params["start"]
+
+
+def test_loki_empty_response_stays_empty(monkeypatch) -> None:
+    """An empty Loki response should not be replaced with fake logs."""
+
+    FakeAsyncClient.payload = loki_payload()
+    FakeAsyncClient.raised = None
+    FakeAsyncClient.status_code = 200
+    FakeAsyncClient.calls = []
+    monkeypatch.setattr("app.services.observability.httpx.AsyncClient", FakeAsyncClient)
+
+    client = LokiClient(Settings(environment="test", allow_mock_observability=True))
+    logs = asyncio.run(client.logs("infrawatch-backend"))
+
+    assert logs.source == "loki"
+    assert logs.lines == []
+
+
+def test_loki_http_errors_surface_when_not_in_demo(monkeypatch) -> None:
+    """Loki failures should be reported instead of silently becoming fake logs."""
+
+    FakeAsyncClient.payload = {}
+    FakeAsyncClient.raised = httpx.ConnectTimeout("timeout")
+    FakeAsyncClient.status_code = 200
+    FakeAsyncClient.calls = []
+    monkeypatch.setattr("app.services.observability.httpx.AsyncClient", FakeAsyncClient)
+
+    client = LokiClient(Settings(environment="development", allow_mock_observability=True))
+
+    try:
+        asyncio.run(client.logs("infrawatch-backend"))
+    except httpx.ConnectTimeout:
+        pass
+    else:
+        raise AssertionError("Loki timeout should be surfaced outside explicit demo/test contexts")
+
+
+def test_loki_malformed_response_surfaces_when_not_in_demo(monkeypatch) -> None:
+    """Malformed Loki payloads should not be hidden as real logs."""
+
+    FakeAsyncClient.payload = {"unexpected": "shape"}
+    FakeAsyncClient.raised = None
+    FakeAsyncClient.status_code = 200
+    FakeAsyncClient.calls = []
+    monkeypatch.setattr("app.services.observability.httpx.AsyncClient", FakeAsyncClient)
+
+    client = LokiClient(Settings(environment="development", allow_mock_observability=True))
+
+    try:
+        asyncio.run(client.logs("infrawatch-backend"))
+    except KeyError:
+        pass
+    else:
+        raise AssertionError("Malformed Loki responses should be surfaced outside demo/test contexts")
+
+
+def test_loki_demo_fallback_is_explicitly_marked_mock(monkeypatch) -> None:
+    """Demo fallback logs must never claim to come from Loki."""
+
+    FakeAsyncClient.payload = {}
+    FakeAsyncClient.raised = httpx.ConnectError("loki unavailable")
+    FakeAsyncClient.status_code = 200
+    FakeAsyncClient.calls = []
+    monkeypatch.setattr("app.services.observability.httpx.AsyncClient", FakeAsyncClient)
+
+    client = LokiClient(Settings(environment="demo", allow_mock_observability=True))
+    logs = asyncio.run(client.logs("catalog-api"))
+
+    assert logs.source == "mock"
+    assert logs.lines
+
+
+def test_loki_rejects_unsafe_label_filters() -> None:
+    """Unsafe service/pod labels should be rejected before a LogQL query is built."""
+
+    client = LokiClient(Settings(environment="test", allow_mock_observability=False))
+
+    try:
+        asyncio.run(client.logs("bad/service"))
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("Unsafe Loki label values must be rejected")
 
 
 def test_empty_prometheus_series_falls_back_to_mock_metrics() -> None:

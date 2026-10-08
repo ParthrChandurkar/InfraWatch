@@ -1200,6 +1200,67 @@ td {
   text-align: center;
 }
 
+.log-toolbar {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(150px, 0.8fr) 118px auto;
+  gap: 9px;
+  margin-bottom: 12px;
+}
+
+.log-toolbar label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  color: #9aa4b2;
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.log-toolbar input,
+.log-toolbar select {
+  width: 100%;
+  min-height: 36px;
+  border: 1px solid #334050;
+  border-radius: 8px;
+  background: #0c1117;
+  color: #f4f7fb;
+  padding: 0 10px;
+  outline: 0;
+}
+
+.log-toolbar button {
+  align-self: end;
+  min-height: 36px;
+  padding: 0 11px;
+  background: #172231;
+  color: #79bdff;
+}
+
+.log-state {
+  margin-bottom: 10px;
+  border: 1px solid #334050;
+  border-radius: 10px;
+  background: #111820;
+  color: #b9c8d8;
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.log-state.unavailable {
+  border-color: #6f3340;
+  background: #2a1218;
+  color: #ffb8c1;
+}
+
+.log-state.simulated {
+  border-color: rgba(241, 199, 91, 0.34);
+  background: #211b0d;
+  color: #f4d57a;
+}
+
 .log-viewer {
   display: flex;
   flex-direction: column;
@@ -1226,11 +1287,33 @@ td {
 }
 
 .log-line code {
+  display: block;
+  margin-top: 5px;
   color: #e5ecf5;
   font-size: 12px;
   line-height: 1.45;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
+}
+
+.log-context {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.log-context span {
+  max-width: 100%;
+  overflow: hidden;
+  border: 1px solid #2b3540;
+  border-radius: 999px;
+  background: #121b26;
+  color: #9aa4b2;
+  padding: 2px 7px;
+  font-size: 11px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .audit-list {
@@ -1370,6 +1453,10 @@ td {
     grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   }
 
+  .log-toolbar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .dashboard-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     grid-template-areas:
@@ -1430,6 +1517,7 @@ td {
   .service-facts,
   .dashboard-grid,
   .deploy-number-row,
+  .log-toolbar,
   .stack-grid,
   .hero-mini-grid {
     grid-template-columns: 1fr;

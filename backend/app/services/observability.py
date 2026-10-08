@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import re
 import time
 from datetime import UTC, datetime
 from typing import Any
@@ -28,6 +29,7 @@ PROMETHEUS_CACHE_EVENTS = Counter(
 
 PROMETHEUS_RANGE_SECONDS = 15 * 60
 PROMETHEUS_STEP_SECONDS = 30
+LOG_LABEL_VALUE_PATTERN = re.compile(r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$")
 
 
 class PrometheusClient:
@@ -226,37 +228,99 @@ class LokiClient:
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
 
-    async def logs(self, service: str, limit: int = 100) -> LogsResponse:
+    async def logs(
+        self,
+        service: str,
+        limit: int = 100,
+        *,
+        minutes: int = 15,
+        search: str | None = None,
+        pod: str | None = None,
+        container: str | None = None,
+    ) -> LogsResponse:
         """Return recent log lines for a service."""
 
         try:
+            query = self._logql_query(service, search=search, pod=pod, container=container)
+            query_end = int(time.time() * 1_000_000_000)
+            query_start = query_end - min(max(minutes, 1), 60) * 60 * 1_000_000_000
             params = {
-                "query": f'{{app="{service}"}}',
-                "limit": limit,
+                "query": query,
+                "limit": min(max(limit, 1), 500),
                 "direction": "backward",
+                "start": query_start,
+                "end": query_end,
             }
             async with httpx.AsyncClient(timeout=self._settings.observability_timeout_seconds) as client:
                 response = await client.get(f"{self._settings.loki_url}/loki/api/v1/query_range", params=params)
                 response.raise_for_status()
             payload = response.json()
             lines = self._parse_loki_streams(payload)
-            if self._settings.allow_mock_observability and not lines:
-                return self._mock_logs(service, limit)
             return LogsResponse(service=service, lines=lines[:limit], source="loki")
         except (httpx.HTTPError, KeyError, IndexError, ValueError):
-            if not self._settings.allow_mock_observability:
+            if not self._can_use_mock_logs():
                 raise
             return self._mock_logs(service, limit)
+
+    def _logql_query(
+        self,
+        service: str,
+        *,
+        search: str | None = None,
+        pod: str | None = None,
+        container: str | None = None,
+    ) -> str:
+        """Build a bounded, service-specific LogQL query from safe label filters."""
+
+        labels = {
+            "namespace": self._settings.kubectl_namespace,
+            "app": self._safe_label_value(service, field="service"),
+        }
+        if pod:
+            labels["pod"] = self._safe_label_value(pod, field="pod")
+        if container:
+            labels["container"] = self._safe_label_value(container, field="container")
+        selector = ",".join(f'{key}="{value}"' for key, value in labels.items())
+        query = f"{{{selector}}}"
+        if search:
+            cleaned = search.strip()
+            if cleaned:
+                query = f"{query} |= {json.dumps(cleaned[:200])}"
+        return query
+
+    def _safe_label_value(self, value: str, *, field: str) -> str:
+        """Validate exact-match Loki label values used by InfraWatch queries."""
+
+        if not LOG_LABEL_VALUE_PATTERN.fullmatch(value):
+            raise ValueError(f"invalid {field} label")
+        return value
 
     def _parse_loki_streams(self, payload: dict) -> list[LogLine]:
         """Convert Loki stream values into API log lines."""
 
+        if payload.get("status") not in (None, "success"):
+            raise ValueError("Loki returned an unsuccessful status")
         parsed: list[LogLine] = []
         for stream in payload["data"]["result"]:
+            labels = {str(key): str(value) for key, value in stream.get("stream", {}).items()}
             for raw_timestamp, line in stream["values"]:
                 timestamp = datetime.fromtimestamp(int(raw_timestamp) / 1_000_000_000, UTC).isoformat()
-                parsed.append(LogLine(timestamp=timestamp, line=line))
-        return parsed
+                parsed.append(
+                    LogLine(
+                        timestamp=timestamp,
+                        line=line,
+                        namespace=labels.get("namespace"),
+                        pod=labels.get("pod"),
+                        container=labels.get("container"),
+                        labels=labels,
+                    )
+                )
+        return sorted(parsed, key=lambda entry: entry.timestamp, reverse=True)
+
+    def _can_use_mock_logs(self) -> bool:
+        """Allow simulated backend logs only in explicit demo/test fallback contexts."""
+
+        return self._settings.allow_mock_observability and self._settings.environment in {"demo", "test"}
 
     def _mock_logs(self, service: str, limit: int) -> LogsResponse:
         """Return varied operational logs when Loki is not reachable."""

@@ -66,6 +66,10 @@ export interface WorkloadHealth {
 export interface LogLine {
   timestamp: string;
   line: string;
+  namespace?: string;
+  pod?: string;
+  container?: string;
+  labels?: Record<string, string>;
 }
 
 export interface LogsResponse {

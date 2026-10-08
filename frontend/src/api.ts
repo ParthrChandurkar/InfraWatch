@@ -132,10 +132,30 @@ export function getWorkloadHealth(service: string): Promise<WorkloadHealth> {
   );
 }
 
-export function getLogs(service: string): Promise<LogsResponse> {
+export function getLogs(
+  service: string,
+  options: { search?: string; pod?: string; container?: string; minutes?: number; limit?: number } = {},
+): Promise<LogsResponse> {
+  const params = new URLSearchParams();
+  if (options.search?.trim()) {
+    params.set("search", options.search.trim());
+  }
+  if (options.pod) {
+    params.set("pod", options.pod);
+  }
+  if (options.container) {
+    params.set("container", options.container);
+  }
+  if (options.minutes) {
+    params.set("minutes", String(options.minutes));
+  }
+  if (options.limit) {
+    params.set("limit", String(options.limit));
+  }
+  const suffix = params.toString() ? `?${params.toString()}` : "";
   return withDemoFallback(
-    () => request<LogsResponse>(`/logs/${service}`),
-    () => getDemoLogs(service),
+    () => request<LogsResponse>(`/logs/${service}${suffix}`),
+    () => getDemoLogs(service, options.search),
   );
 }
 

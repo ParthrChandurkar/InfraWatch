@@ -181,15 +181,29 @@ export function getDemoMetrics(service: string): ServiceMetrics {
   };
 }
 
-export function getDemoLogs(service: string): LogsResponse {
+export function getDemoLogs(service: string, search = ""): LogsResponse {
+  const lines = [
+    { timestamp: minutesAgo(2), line: `[info] ${service} health check passed`, pod: `${service}-demo-1`, container: "app" },
+    {
+      timestamp: minutesAgo(5),
+      line: "[info] rollout is serving traffic on the configured port",
+      pod: `${service}-demo-1`,
+      container: "app",
+    },
+    {
+      timestamp: minutesAgo(9),
+      line: "[info] deployment reconciled by InfraWatch",
+      pod: `${service}-demo-2`,
+      container: "app",
+    },
+  ];
+  const normalizedSearch = search.trim().toLowerCase();
   return {
     service,
     source: "browser sandbox",
-    lines: [
-      { timestamp: minutesAgo(2), line: `[info] ${service} health check passed` },
-      { timestamp: minutesAgo(5), line: `[info] rollout is serving traffic on the configured port` },
-      { timestamp: minutesAgo(9), line: `[info] deployment reconciled by InfraWatch` },
-    ],
+    lines: normalizedSearch
+      ? lines.filter((entry) => entry.line.toLowerCase().includes(normalizedSearch))
+      : lines,
   };
 }
 

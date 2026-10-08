@@ -152,5 +152,5 @@ variable "rollout_timeout_seconds" {
 variable "observability_timeout_seconds" {
   description = "Timeout for backend calls to observability systems."
   type        = number
-  default     = 4
+  default     = 10
 }
