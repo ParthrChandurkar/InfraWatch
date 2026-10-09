@@ -1,6 +1,6 @@
 # InfraWatch
 
-InfraWatch is a local-first deployment and observability project for running a sample application stack with Docker Compose or Minikube. It combines a React dashboard, FastAPI backend, Kubernetes resources, Terraform-based namespace setup, Helm-managed monitoring, and Redis-backed caching.
+InfraWatch is a local-first deployment and observability project for running a sample application stack with Docker Compose or Minikube. It combines a React dashboard, FastAPI backend, Kubernetes resources, Terraform-based namespace setup, a mixed manifest/Helm observability stack, and Redis-backed caching.
 
 ## Features
 
@@ -9,7 +9,7 @@ InfraWatch is a local-first deployment and observability project for running a s
 - Docker Compose development stack
 - Minikube-oriented Kubernetes manifests and Kustomize configuration
 - Terraform configuration for the Kubernetes foundation
-- Helm/scripts for Prometheus, Grafana, Loki, Grafana Alloy, and Alertmanager
+- Mixed observability deployment: Kubernetes manifests for Prometheus, Grafana, Alertmanager, and kube-state-metrics; Helm for Loki and Grafana Alloy
 - PostgreSQL persistence and Redis caching
 - Failure-demonstration manifests for common Kubernetes workload states
 - GitHub Actions checks for code, tests, builds, images, and optional deployment

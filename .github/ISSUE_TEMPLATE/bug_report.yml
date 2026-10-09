@@ -1,0 +1,69 @@
+name: Bug report
+description: Report a reproducible InfraWatch problem.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. Do not include credentials, tokens, kubeconfig contents, or sensitive logs.
+  - type: input
+    id: commit
+    attributes:
+      label: InfraWatch version or commit
+      description: Paste the version, commit SHA, or branch you tested.
+      placeholder: "a85c726 or main"
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: "Windows 11, Ubuntu 24.04, macOS, etc."
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Docker and Kubernetes environment
+      description: Include sanitized versions for Docker, kubectl, Minikube, Terraform, and Helm if relevant.
+      placeholder: |
+        Docker:
+        kubectl:
+        Minikube:
+        Terraform:
+        Helm:
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+      description: List the smallest set of commands or UI actions needed to reproduce the issue.
+      placeholder: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant sanitized logs
+      description: Remove tokens, passwords, kubeconfig content, private URLs, and sensitive application data.
+      render: shell
+    validations:
+      required: false

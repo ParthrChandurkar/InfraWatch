@@ -1,0 +1,38 @@
+name: Feature request
+description: Suggest an improvement that fits InfraWatch's local-first scope.
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        InfraWatch is focused on local-first Kubernetes deployment and observability. Please avoid sharing secrets, credentials, or kubeconfig content.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What local development, Kubernetes, or observability problem should this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Proposed outcome
+      description: Describe the user-visible behavior you want.
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Why this fits InfraWatch
+      description: Explain how this stays aligned with local-first Docker/Kubernetes observability.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Optional. Mention any simpler workaround or existing tool you considered.
+    validations:
+      required: false

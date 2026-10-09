@@ -252,8 +252,8 @@ Traffic/load
 
 InfraWatch includes an HPA for `deployment/infrawatch-backend`:
 
-- min replicas: 2
-- max replicas: 6
+- min replicas: 1
+- max replicas: 3
 - CPU target: 70%
 
 This requires Minikube metrics-server:

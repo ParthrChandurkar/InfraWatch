@@ -257,6 +257,58 @@ Look for:
 - labels do not match FastAPI query
 - selected service emits no logs
 
+## Alertmanager has no alerts or is unavailable
+
+First command:
+
+```bash
+kubectl get deployment/infrawatch-alertmanager svc/infrawatch-alertmanager endpoints/infrawatch-alertmanager -n infrawatch
+```
+
+Check readiness:
+
+```bash
+kubectl port-forward -n infrawatch svc/infrawatch-alertmanager 9093:9093
+curl http://localhost:9093/-/ready
+curl http://localhost:9093/api/v2/alerts
+```
+
+How to read the result:
+
+- `[]` from `/api/v2/alerts` means Alertmanager is reachable but has no active alerts.
+- Connection failures, HTTP 5xx responses, or a failed readiness endpoint mean the Alertmanager API is unavailable.
+- In real local mode, the InfraWatch backend should report an availability error instead of replacing an unavailable Alertmanager with fake alerts.
+
+Inspect Prometheus rule and target health:
+
+```bash
+kubectl port-forward -n infrawatch svc/infrawatch-prometheus 9090:9090
+```
+
+Open:
+
+```text
+http://localhost:9090/rules
+http://localhost:9090/targets
+```
+
+Look for:
+
+- `infrawatch.rules` loaded from `infrawatch-alert-rules`;
+- Alertmanager target configured and healthy;
+- rule expressions with no matching series;
+- Prometheus unable to scrape backend, kube-state-metrics, or Kubernetes/cAdvisor metrics.
+
+Collect sanitized logs:
+
+```bash
+kubectl logs deployment/infrawatch-alertmanager -n infrawatch --tail=100
+kubectl logs deployment/infrawatch-prometheus -n infrawatch --tail=100
+kubectl logs deployment/infrawatch-backend -n infrawatch --tail=100
+```
+
+Do not paste credentials, kubeconfig content, private URLs, or sensitive application logs into public issues.
+
 ## Rollout stuck or failed
 
 First command:
