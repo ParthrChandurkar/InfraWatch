@@ -1,5 +1,6 @@
 import type {
   AuditLogEntry,
+  AlertsResponse,
   DeployPayload,
   DeploymentRecord,
   LogsResponse,
@@ -204,6 +205,29 @@ export function getDemoLogs(service: string, search = ""): LogsResponse {
     lines: normalizedSearch
       ? lines.filter((entry) => entry.line.toLowerCase().includes(normalizedSearch))
       : lines,
+  };
+}
+
+export function getDemoAlerts(): AlertsResponse {
+  const pendingDeployment = listDemoDeployments().find((deployment) => deployment.status !== "Running");
+  return {
+    source: "browser sandbox",
+    alerts: pendingDeployment
+      ? [
+          {
+            fingerprint: `browser-${pendingDeployment.name}-pending`,
+            status: "firing",
+            alertname: "DemoRolloutPending",
+            severity: "warning",
+            service: pendingDeployment.name,
+            namespace: pendingDeployment.namespace,
+            pod: `${pendingDeployment.name}-demo-1`,
+            starts_at: pendingDeployment.updated_at,
+            summary: "Demo rollout health signal",
+            description: "This is simulated browser-sandbox alert data, not an Alertmanager alert.",
+          },
+        ]
+      : [],
   };
 }
 

@@ -9,8 +9,8 @@ from fastapi.testclient import TestClient
 from app.config import Settings
 from app.main import create_app
 from app.repository import connect_postgres
-from app.schemas import MetricPoint, ServiceMetrics
-from app.services.observability import LokiClient, PrometheusClient
+from app.schemas import AlertsResponse, AlertSummary, MetricPoint, ServiceMetrics
+from app.services.observability import AlertmanagerClient, LokiClient, PrometheusClient
 
 
 class FakeRedis:
@@ -76,10 +76,10 @@ class FakeAsyncClient:
     async def __aexit__(self, exc_type, exc, traceback) -> None:
         return None
 
-    async def get(self, url: str, params: dict):
+    async def get(self, url: str, params: dict | None = None):
         """Capture the request and return a fake response."""
 
-        self.calls.append({"url": url, "params": params})
+        self.calls.append({"url": url, "params": params or {}})
         if self.raised:
             raise self.raised
         return FakeHttpResponse(self.payload, status_code=self.status_code)
@@ -460,6 +460,128 @@ def test_loki_rejects_unsafe_label_filters() -> None:
         pass
     else:
         raise AssertionError("Unsafe Loki label values must be rejected")
+
+
+def test_alertmanager_alerts_are_normalized(monkeypatch) -> None:
+    """Alertmanager payloads should become a stable dashboard contract."""
+
+    FakeAsyncClient.payload = [
+        {
+            "fingerprint": "abc123",
+            "status": {"state": "active"},
+            "labels": {
+                "alertname": "DeploymentUnavailable",
+                "severity": "critical",
+                "namespace": "infrawatch",
+                "pod": "infrawatch-backend-abc",
+                "service": "infrawatch-backend",
+                "instance": "minikube",
+            },
+            "annotations": {
+                "summary": "Deployment has unavailable replicas",
+                "description": "infrawatch-backend has unavailable pods.",
+            },
+            "startsAt": "2026-10-08T10:00:00Z",
+        }
+    ]
+    FakeAsyncClient.raised = None
+    FakeAsyncClient.status_code = 200
+    FakeAsyncClient.calls = []
+    monkeypatch.setattr("app.services.observability.httpx.AsyncClient", FakeAsyncClient)
+
+    client = AlertmanagerClient(Settings(environment="development", allow_mock_observability=False))
+    alerts = asyncio.run(client.alerts())
+
+    assert alerts.source == "alertmanager"
+    assert alerts.alerts[0].fingerprint == "abc123"
+    assert alerts.alerts[0].status == "firing"
+    assert alerts.alerts[0].alertname == "DeploymentUnavailable"
+    assert alerts.alerts[0].severity == "critical"
+    assert alerts.alerts[0].service == "infrawatch-backend"
+    assert alerts.alerts[0].namespace == "infrawatch"
+    assert alerts.alerts[0].pod == "infrawatch-backend-abc"
+    assert alerts.alerts[0].summary == "Deployment has unavailable replicas"
+    assert FakeAsyncClient.calls[0]["url"].endswith("/api/v2/alerts")
+
+
+def test_alertmanager_empty_response_is_not_mocked(monkeypatch) -> None:
+    """A reachable Alertmanager with no active alerts should stay empty."""
+
+    FakeAsyncClient.payload = []
+    FakeAsyncClient.raised = None
+    FakeAsyncClient.status_code = 200
+    FakeAsyncClient.calls = []
+    monkeypatch.setattr("app.services.observability.httpx.AsyncClient", FakeAsyncClient)
+
+    client = AlertmanagerClient(Settings(environment="test", allow_mock_observability=True))
+    alerts = asyncio.run(client.alerts())
+
+    assert alerts.source == "alertmanager"
+    assert alerts.alerts == []
+
+
+def test_alertmanager_failures_surface_outside_demo(monkeypatch) -> None:
+    """Alertmanager outages should not become fake alerts in real/local mode."""
+
+    FakeAsyncClient.payload = {}
+    FakeAsyncClient.raised = httpx.ConnectError("alertmanager unavailable")
+    FakeAsyncClient.status_code = 200
+    FakeAsyncClient.calls = []
+    monkeypatch.setattr("app.services.observability.httpx.AsyncClient", FakeAsyncClient)
+
+    client = AlertmanagerClient(Settings(environment="development", allow_mock_observability=True))
+
+    try:
+        asyncio.run(client.alerts())
+    except httpx.ConnectError:
+        pass
+    else:
+        raise AssertionError("Alertmanager outage should be surfaced outside demo/test contexts")
+
+
+def test_alertmanager_demo_fallback_is_explicitly_marked_mock(monkeypatch) -> None:
+    """Demo fallback alerts must never claim to come from Alertmanager."""
+
+    FakeAsyncClient.payload = {}
+    FakeAsyncClient.raised = httpx.ConnectError("alertmanager unavailable")
+    FakeAsyncClient.status_code = 200
+    FakeAsyncClient.calls = []
+    monkeypatch.setattr("app.services.observability.httpx.AsyncClient", FakeAsyncClient)
+
+    client = AlertmanagerClient(Settings(environment="demo", allow_mock_observability=True))
+    alerts = asyncio.run(client.alerts())
+
+    assert alerts.source == "mock"
+    assert alerts.alerts
+    assert alerts.alerts[0].description == "This simulated alert is not from Alertmanager."
+
+
+def test_alerts_endpoint_uses_alertmanager_client(tmp_path) -> None:
+    """The public alerts endpoint should return the Alertmanager client response."""
+
+    class FakeAlertmanager:
+        async def alerts(self) -> AlertsResponse:
+            return AlertsResponse(
+                source="alertmanager",
+                alerts=[
+                    AlertSummary(
+                        fingerprint="route-alert",
+                        status="firing",
+                        alertname="BackendUnavailable",
+                        severity="critical",
+                    )
+                ],
+            )
+
+    client = build_client(tmp_path)
+    client.app.state.alertmanager_client = FakeAlertmanager()
+
+    response = client.get("/alerts")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["source"] == "alertmanager"
+    assert body["alerts"][0]["fingerprint"] == "route-alert"
 
 
 def test_empty_prometheus_series_falls_back_to_mock_metrics() -> None:

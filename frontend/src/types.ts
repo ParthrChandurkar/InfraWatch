@@ -78,6 +78,25 @@ export interface LogsResponse {
   source: string;
 }
 
+export interface AlertSummary {
+  fingerprint: string;
+  status: string;
+  alertname: string;
+  severity?: string;
+  instance?: string;
+  service?: string;
+  namespace?: string;
+  pod?: string;
+  starts_at?: string;
+  summary?: string;
+  description?: string;
+}
+
+export interface AlertsResponse {
+  source: string;
+  alerts: AlertSummary[];
+}
+
 export interface AuditLogEntry {
   id: string;
   action: string;

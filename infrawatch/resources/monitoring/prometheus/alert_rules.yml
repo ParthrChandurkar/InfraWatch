@@ -7,33 +7,63 @@ groups:
         for: 1m
         labels:
           severity: critical
+          service: '{{ $labels.job }}'
+          namespace: infrawatch
         annotations:
           summary: Service is down
-          description: "Prometheus has been unable to scrape {{ $labels.job }} for more than 1 minute."
+          description: 'Prometheus has been unable to scrape {{ $labels.job }} for more than 1 minute.'
+
+      - alert: BackendUnavailable
+        expr: up{job="infrawatch-backend"} == 0
+        for: 30s
+        labels:
+          severity: critical
+          service: infrawatch-backend
+          namespace: infrawatch
+        annotations:
+          summary: InfraWatch backend is unavailable
+          description: Prometheus cannot scrape the InfraWatch backend metrics endpoint.
 
       - alert: HighCpuUsage
-        expr: sum(rate(container_cpu_usage_seconds_total[5m])) by (pod) > 0.8
+        expr: sum(rate(container_cpu_usage_seconds_total{namespace="infrawatch",pod!=""}[5m])) by (namespace, pod) > 0.8
         for: 5m
         labels:
           severity: warning
+          service: '{{ $labels.pod }}'
+          namespace: '{{ $labels.namespace }}'
         annotations:
-          summary: Pod CPU usage above 80 percent
-          description: "{{ $labels.pod }} is consuming high CPU for at least 5 minutes."
+          summary: Pod CPU usage is high
+          description: '{{ $labels.pod }} is consuming more than 0.8 CPU cores for at least 5 minutes.'
+
+      - alert: HighMemoryUsage
+        expr: sum(container_memory_working_set_bytes{namespace="infrawatch",pod!=""}) by (namespace, pod) / 1024 / 1024 > 700
+        for: 5m
+        labels:
+          severity: warning
+          service: '{{ $labels.pod }}'
+          namespace: '{{ $labels.namespace }}'
+        annotations:
+          summary: Pod memory usage is high
+          description: '{{ $labels.pod }} is using more than 700 MiB of memory for at least 5 minutes.'
 
       - alert: PodCrashLooping
-        expr: max_over_time(kube_pod_container_status_waiting_reason{reason="CrashLoopBackOff"}[5m]) >= 1
+        expr: max_over_time(kube_pod_container_status_waiting_reason{namespace="infrawatch",reason="CrashLoopBackOff"}[5m]) >= 1
         for: 2m
         labels:
           severity: critical
+          service: '{{ $labels.pod }}'
+          namespace: '{{ $labels.namespace }}'
         annotations:
           summary: Pod is crash looping
-          description: "{{ $labels.pod }} has been in CrashLoopBackOff."
+          description: '{{ $labels.pod }} has been in CrashLoopBackOff.'
 
       - alert: DeploymentUnavailable
-        expr: kube_deployment_status_replicas_unavailable > 0
-        for: 2m
+        expr: kube_deployment_status_replicas_unavailable{namespace="infrawatch"} > 0
+        for: 30s
         labels:
           severity: warning
+          service: '{{ $labels.deployment }}'
+          namespace: '{{ $labels.namespace }}'
         annotations:
           summary: Deployment has unavailable replicas
-          description: "{{ $labels.deployment }} has unavailable replicas."
+          description: '{{ $labels.deployment }} has unavailable replicas in namespace {{ $labels.namespace }}.'

@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException, Query, Request, status
 from prometheus_client import Counter, Histogram
 
 from app.schemas import (
+    AlertsResponse,
     AuditLogEntry,
     DeploymentRecord,
     DeploymentRequest,
@@ -128,6 +129,19 @@ def build_router() -> APIRouter:
                 raise HTTPException(
                     status_code=status.HTTP_502_BAD_GATEWAY,
                     detail="Unable to read logs from Loki",
+                ) from exc
+
+    @router.get("/alerts", response_model=AlertsResponse, tags=["observability"])
+    async def alerts(request: Request) -> AlertsResponse:
+        """Return normalized Alertmanager alert state for the dashboard."""
+
+        with REQUEST_TIMER.labels(route="/alerts").time():
+            try:
+                return await request.app.state.alertmanager_client.alerts()
+            except Exception as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail="Unable to read alerts from Alertmanager",
                 ) from exc
 
     @router.delete("/deployment/{name}", status_code=status.HTTP_200_OK, tags=["deployments"])

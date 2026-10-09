@@ -34,6 +34,7 @@ import {
   apiMode,
   deleteDeployment,
   deployService,
+  getAlerts,
   getLogs,
   getMetrics,
   getWorkloadHealth,
@@ -46,6 +47,8 @@ import {
 } from "./api";
 import type {
   AuditLogEntry,
+  AlertSummary,
+  AlertsResponse,
   DeploymentRecord,
   DeploymentStatus,
   LogsResponse,
@@ -72,6 +75,7 @@ const EMPTY_METRICS: ServiceMetrics = {
 };
 
 const EMPTY_LOGS: LogsResponse = { service: "", lines: [], source: "empty" };
+const EMPTY_ALERTS: AlertsResponse = { source: "empty", alerts: [] };
 const REPOSITORY_URL = "https://github.com/ParthrChandurkar/InfraWatch";
 const LOCAL_TOOLS = [
   { label: "Grafana", href: "http://localhost:3001", icon: <BarChart3 size={16} /> },
@@ -87,6 +91,7 @@ function App() {
   const [metrics, setMetrics] = useState<ServiceMetrics>(EMPTY_METRICS);
   const [workload, setWorkload] = useState<WorkloadHealth | null>(null);
   const [logs, setLogs] = useState<LogsResponse>(EMPTY_LOGS);
+  const [alerts, setAlerts] = useState<AlertsResponse>(EMPTY_ALERTS);
   const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isObservabilityLoading, setIsObservabilityLoading] = useState(false);
@@ -95,9 +100,12 @@ function App() {
   const [error, setError] = useState("");
   const [observabilityError, setObservabilityError] = useState("");
   const [logError, setLogError] = useState("");
+  const [alertError, setAlertError] = useState("");
   const [logSearch, setLogSearch] = useState("");
   const [logPodFilter, setLogPodFilter] = useState("");
   const [logWindowMinutes, setLogWindowMinutes] = useState(15);
+  const [alertSeverityFilter, setAlertSeverityFilter] = useState("");
+  const [alertServiceFilter, setAlertServiceFilter] = useState("");
   const observabilityRequestActive = useRef(false);
   const [form, setForm] = useState({
     name: "catalog-api",
@@ -141,6 +149,17 @@ function App() {
     setAuditLogs(entries);
   }, []);
 
+  const refreshAlerts = useCallback(async () => {
+    try {
+      const response = await getAlerts();
+      setAlerts(response);
+      setAlertError("");
+    } catch (reason) {
+      setAlerts({ source: "unavailable", alerts: [] });
+      setAlertError(reason instanceof Error ? reason.message : "Alertmanager is unavailable");
+    }
+  }, []);
+
   const refreshObservability = useCallback(async (
     serviceName: string,
     logOptions: { search?: string; pod?: string; minutes?: number } = {},
@@ -176,13 +195,13 @@ function App() {
 
   useEffect(() => {
     let isMounted = true;
-    Promise.all([refreshDeployments(), refreshAuditLogs()])
+    Promise.all([refreshDeployments(), refreshAuditLogs(), refreshAlerts()])
       .catch((reason: Error) => isMounted && setError(reason.message))
       .finally(() => isMounted && setIsLoading(false));
     return () => {
       isMounted = false;
     };
-  }, [refreshAuditLogs, refreshDeployments]);
+  }, [refreshAlerts, refreshAuditLogs, refreshDeployments]);
 
   useEffect(() => {
     const serviceName = selectedDeployment?.name;
@@ -192,6 +211,7 @@ function App() {
       setWorkload(null);
       setObservabilityError("");
       setLogError("");
+      void refreshAlerts();
       return;
     }
 
@@ -208,6 +228,7 @@ function App() {
           pod: logPodFilter,
           minutes: logWindowMinutes,
         });
+        await refreshAlerts();
         if (isMounted) {
           setObservabilityError("");
         }
@@ -229,13 +250,14 @@ function App() {
       isMounted = false;
       window.clearInterval(timer);
     };
-  }, [logPodFilter, logSearch, logWindowMinutes, refreshObservability, selectedDeployment?.name]);
+  }, [logPodFilter, logSearch, logWindowMinutes, refreshAlerts, refreshObservability, selectedDeployment?.name]);
 
   async function handleRefresh() {
     setError("");
     try {
       await refreshDeployments();
       await refreshAuditLogs();
+      await refreshAlerts();
       if (selectedDeployment?.name) {
         await refreshObservability(selectedDeployment.name, {
           search: logSearch,
@@ -305,7 +327,7 @@ function App() {
     setError("");
     setIsLoading(true);
     try {
-      await Promise.all([refreshDeployments(), refreshAuditLogs()]);
+      await Promise.all([refreshDeployments(), refreshAuditLogs(), refreshAlerts()]);
     } finally {
       setIsLoading(false);
     }
@@ -365,6 +387,25 @@ function App() {
     logs.lines.forEach((entry) => entry.pod && names.add(entry.pod));
     return Array.from(names).sort();
   }, [logs.lines, workload?.pods]);
+  const alertSeverityOptions = useMemo(
+    () => Array.from(new Set(alerts.alerts.map((alert) => alert.severity).filter(Boolean))).sort() as string[],
+    [alerts.alerts],
+  );
+  const alertServiceOptions = useMemo(
+    () => Array.from(new Set(alerts.alerts.map((alert) => alert.service).filter(Boolean))).sort() as string[],
+    [alerts.alerts],
+  );
+  const visibleAlerts = useMemo(
+    () =>
+      alerts.alerts.filter((alert) => {
+        const severityMatches = !alertSeverityFilter || alert.severity === alertSeverityFilter;
+        const serviceMatches = !alertServiceFilter || alert.service === alertServiceFilter;
+        return severityMatches && serviceMatches;
+      }),
+    [alertServiceFilter, alertSeverityFilter, alerts.alerts],
+  );
+  const firingAlerts = alerts.alerts.filter((alert) => alert.status === "firing").length;
+  const alertSourceLabel = alertError ? "Unavailable" : sourceLabel(alerts.source);
 
   const healthTone = telemetry.healthScore >= 90 ? "excellent" : telemetry.healthScore >= 70 ? "steady" : "attention";
   const activeRolloutCount = summary.Pending + summary.Deploying;
@@ -372,6 +413,7 @@ function App() {
     summary.Failed === 0,
     activeRolloutCount === 0,
     telemetry.errors < 0.2,
+    firingAlerts === 0,
     Boolean(selectedDeployment),
   ].filter(Boolean).length;
 
@@ -404,6 +446,13 @@ function App() {
       value: isBrowserFallback ? "Mock logs" : sourceLabel(logs.source),
       detail: "Grafana Alloy forwards app logs into Loki",
       tone: logs.source === "empty" && !isBrowserFallback ? "warn" : "ok",
+    },
+    {
+      icon: <AlertTriangle size={18} />,
+      label: "Alertmanager",
+      value: alertError ? "Unavailable" : `${firingAlerts} firing`,
+      detail: "Prometheus alert rules surface through Alertmanager",
+      tone: alertError || firingAlerts ? "warn" : "ok",
     },
     {
       icon: <BarChart3 size={18} />,
@@ -470,6 +519,7 @@ function App() {
           <a href="#deploy">Deploy</a>
           <a href="#workloads">Workloads</a>
           <a href="#observability">Observability</a>
+          <a href="#alerts">Alerts</a>
           <a href="#logs">Logs</a>
         </nav>
 
@@ -580,13 +630,13 @@ function App() {
               <span>{telemetry.healthScore}%</span>
             </div>
             <strong>Local health score</strong>
-            <small>{signalCount}/4 platform checks healthy</small>
+            <small>{signalCount}/5 platform checks healthy</small>
           </div>
           <div className="hero-mini-grid">
             <MiniStat label="Services" value={deployments.length} />
             <MiniStat label="Replicas" value={summary.replicas} />
             <MiniStat label="Rollouts" value={activeRolloutCount} />
-            <MiniStat label="Alerts" value={summary.Failed} />
+            <MiniStat label="Alerts" value={firingAlerts} />
           </div>
         </section>
 
@@ -606,7 +656,7 @@ function App() {
           <SummaryCard icon={<ShieldCheck size={20} />} label="Health score" value={`${telemetry.healthScore}%`} tone="green" />
           <SummaryCard icon={<Server size={20} />} label="Running services" value={summary.Running} tone="blue" />
           <SummaryCard icon={<Layers size={20} />} label="Active replicas" value={summary.replicas} tone="violet" />
-          <SummaryCard icon={<AlertTriangle size={20} />} label="Open failures" value={summary.Failed} tone="red" />
+          <SummaryCard icon={<AlertTriangle size={20} />} label="Firing alerts" value={firingAlerts} tone="red" />
         </section>
 
         <section className="stack-panel" aria-label="InfraWatch platform stack">
@@ -857,6 +907,71 @@ function App() {
             </div>
           </section>
 
+          <section className="panel alerts-panel" id="alerts">
+            <div className="panel-heading">
+              <div>
+                <span className="section-kicker">Real Alerts</span>
+                <h2><AlertTriangle size={18} /> Alertmanager state</h2>
+                <p>Prometheus rules feed Alertmanager; InfraWatch only displays the current alert state.</p>
+              </div>
+              <span className="data-source">{alertSourceLabel}</span>
+            </div>
+            <div className="log-toolbar alert-toolbar">
+              <label>
+                Severity
+                <select
+                  aria-label="Filter alerts by severity"
+                  value={alertSeverityFilter}
+                  onChange={(event) => setAlertSeverityFilter(event.target.value)}
+                >
+                  <option value="">All severities</option>
+                  {alertSeverityOptions.map((severity) => (
+                    <option value={severity} key={severity}>{severity}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Service
+                <select
+                  aria-label="Filter alerts by service"
+                  value={alertServiceFilter}
+                  onChange={(event) => setAlertServiceFilter(event.target.value)}
+                >
+                  <option value="">All services</option>
+                  {alertServiceOptions.map((service) => (
+                    <option value={service} key={service}>{service}</option>
+                  ))}
+                </select>
+              </label>
+              <button type="button" onClick={refreshAlerts}>
+                <RefreshCw size={14} />
+                Refresh
+              </button>
+            </div>
+            {alertError && (
+              <div className="log-state unavailable">
+                Alertmanager is temporarily unavailable: {alertError}
+              </div>
+            )}
+            {!alertError && alerts.source === "mock" && (
+              <div className="log-state simulated">Showing simulated demo alerts, not Alertmanager data.</div>
+            )}
+            {!alertError && alerts.source === "browser sandbox" && (
+              <div className="log-state simulated">Showing browser sandbox alerts, not Alertmanager data.</div>
+            )}
+            <div className="alert-list">
+              {visibleAlerts.map((alert) => (
+                <AlertCard alert={alert} key={alert.fingerprint} />
+              ))}
+              {!visibleAlerts.length && !alertError && (
+                <div className="empty-log">
+                  <CheckCircle2 size={18} />
+                  <span>{alerts.alerts.length ? "No alerts match the current filters." : "No active alerts from Alertmanager."}</span>
+                </div>
+              )}
+            </div>
+          </section>
+
           <section className="panel logs-panel" id="logs">
             <div className="panel-heading">
               <div>
@@ -995,6 +1110,30 @@ function App() {
   );
 }
 
+function AlertCard({ alert }: { alert: AlertSummary }) {
+  const tone = alert.severity ? severityTone(alert.severity) : "unknown";
+  return (
+    <article className={`alert-card ${tone}`}>
+      <div className="alert-card-topline">
+        <div>
+          <strong>{alert.alertname}</strong>
+          <span>{alert.summary ?? "Prometheus alert is active"}</span>
+        </div>
+        <span className={`alert-state ${tone}`}>{alert.severity ?? alert.status}</span>
+      </div>
+      {alert.description && <p>{alert.description}</p>}
+      <div className="alert-meta">
+        <span>{alert.status}</span>
+        {alert.service && <span>{alert.service}</span>}
+        {alert.namespace && <span>{alert.namespace}</span>}
+        {alert.pod && <span>{alert.pod}</span>}
+        {alert.instance && <span>{alert.instance}</span>}
+        {alert.starts_at && <time>{relativeTime(alert.starts_at)}</time>}
+      </div>
+    </article>
+  );
+}
+
 function MiniStat({ label, value }: { label: string; value: string | number }) {
   return (
     <div className="mini-stat">
@@ -1128,6 +1267,9 @@ function sourceLabel(source: string) {
   if (source === "loki") {
     return "Loki";
   }
+  if (source === "alertmanager") {
+    return "Alertmanager";
+  }
   if (source === "unavailable") {
     return "Unavailable";
   }
@@ -1135,6 +1277,16 @@ function sourceLabel(source: string) {
     return "Waiting";
   }
   return source.charAt(0).toUpperCase() + source.slice(1);
+}
+
+function severityTone(severity: string) {
+  if (["critical", "page", "high"].includes(severity.toLowerCase())) {
+    return "critical";
+  }
+  if (["warning", "warn", "medium"].includes(severity.toLowerCase())) {
+    return "warning";
+  }
+  return "info";
 }
 
 function auditTone(status: string) {

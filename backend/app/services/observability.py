@@ -19,7 +19,7 @@ import redis.asyncio as redis
 from prometheus_client import Counter
 
 from app.config import Settings
-from app.schemas import LogLine, LogsResponse, MetricPoint, ServiceMetrics
+from app.schemas import AlertsResponse, AlertSummary, LogLine, LogsResponse, MetricPoint, ServiceMetrics
 
 PROMETHEUS_CACHE_EVENTS = Counter(
     "infrawatch_prometheus_cache_events_total",
@@ -354,3 +354,85 @@ class LokiClient:
             for index in range(min(limit, 20))
         ]
         return LogsResponse(service=service, lines=entries, source="mock")
+
+
+class AlertmanagerClient:
+    """Fetch normalized alert state from Alertmanager."""
+
+    def __init__(self, settings: Settings) -> None:
+        self._settings = settings
+
+    async def alerts(self) -> AlertsResponse:
+        """Return active Alertmanager alerts."""
+
+        try:
+            async with httpx.AsyncClient(timeout=self._settings.observability_timeout_seconds) as client:
+                response = await client.get(f"{self._settings.alertmanager_url}/api/v2/alerts")
+                response.raise_for_status()
+            payload = response.json()
+            return AlertsResponse(
+                source="alertmanager",
+                alerts=[self._normalize_alert(alert) for alert in payload],
+            )
+        except (httpx.HTTPError, TypeError, KeyError, ValueError):
+            if not self._can_use_mock_alerts():
+                raise
+            return self._mock_alerts()
+
+    def _normalize_alert(self, alert: dict[str, Any]) -> AlertSummary:
+        """Return the subset of Alertmanager fields the dashboard needs."""
+
+        labels = {str(key): str(value) for key, value in alert.get("labels", {}).items()}
+        annotations = {str(key): str(value) for key, value in alert.get("annotations", {}).items()}
+        status = alert.get("status") or {}
+        raw_state = status.get("state") if isinstance(status, dict) else status
+        state = "firing" if raw_state == "active" else raw_state
+        service = labels.get("service") or labels.get("job") or labels.get("app")
+        fingerprint = str(alert.get("fingerprint") or self._fallback_fingerprint(labels, alert.get("startsAt")))
+
+        return AlertSummary(
+            fingerprint=fingerprint,
+            status=str(state or "unknown"),
+            alertname=labels.get("alertname", "UnknownAlert"),
+            severity=labels.get("severity"),
+            instance=labels.get("instance"),
+            service=service,
+            namespace=labels.get("namespace"),
+            pod=labels.get("pod"),
+            starts_at=alert.get("startsAt") or alert.get("starts_at"),
+            summary=annotations.get("summary"),
+            description=annotations.get("description"),
+        )
+
+    def _fallback_fingerprint(self, labels: dict[str, str], starts_at: Any) -> str:
+        """Create a stable ID when Alertmanager/test payloads omit one."""
+
+        payload = {"labels": labels, "starts_at": starts_at}
+        encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        return hashlib.sha256(encoded).hexdigest()[:16]
+
+    def _can_use_mock_alerts(self) -> bool:
+        """Allow simulated alerts only in explicit demo/test fallback contexts."""
+
+        return self._settings.allow_mock_observability and self._settings.environment in {"demo", "test"}
+
+    def _mock_alerts(self) -> AlertsResponse:
+        """Return explicitly simulated alert data for demos/tests only."""
+
+        return AlertsResponse(
+            source="mock",
+            alerts=[
+                AlertSummary(
+                    fingerprint="demo-alert-local-cpu",
+                    status="firing",
+                    alertname="DemoHighCpuUsage",
+                    severity="warning",
+                    service="catalog-api",
+                    namespace=self._settings.kubectl_namespace,
+                    pod="catalog-api-demo-1",
+                    starts_at=datetime.now(UTC).isoformat(),
+                    summary="Demo alert for browser/test mode",
+                    description="This simulated alert is not from Alertmanager.",
+                )
+            ],
+        )

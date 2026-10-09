@@ -148,3 +148,26 @@ class LogsResponse(BaseModel):
     service: str
     lines: list[LogLine]
     source: str
+
+
+class AlertSummary(BaseModel):
+    """Normalized Alertmanager alert returned to the dashboard."""
+
+    fingerprint: str
+    status: str
+    alertname: str
+    severity: str | None = None
+    instance: str | None = None
+    service: str | None = None
+    namespace: str | None = None
+    pod: str | None = None
+    starts_at: str | None = None
+    summary: str | None = None
+    description: str | None = None
+
+
+class AlertsResponse(BaseModel):
+    """Alertmanager alert state for the dashboard."""
+
+    source: str
+    alerts: list[AlertSummary] = Field(default_factory=list)

@@ -23,7 +23,7 @@ from app.repository import (
 )
 from app.schemas import DeploymentRequest
 from app.services.deployments import DeploymentService
-from app.services.observability import LokiClient, PrometheusClient
+from app.services.observability import AlertmanagerClient, LokiClient, PrometheusClient
 
 HTTP_REQUEST_COUNTER = Counter(
     "http_requests_total",
@@ -60,6 +60,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.deployment_service = DeploymentService(active_settings, repository, audit_repository)
     app.state.prometheus_client = PrometheusClient(active_settings)
     app.state.loki_client = LokiClient(active_settings)
+    app.state.alertmanager_client = AlertmanagerClient(active_settings)
 
     if active_settings.seed_demo_data and not repository.list():
         _seed_demo_deployments(app.state.deployment_service)

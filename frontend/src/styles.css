@@ -580,6 +580,7 @@ a {
 #deploy,
 #workloads,
 #observability,
+#alerts,
 #logs {
   scroll-margin-top: 22px;
 }
@@ -698,6 +699,7 @@ a {
     "service service deploy flow"
     "telemetry telemetry telemetry telemetry"
     "cpu memory requests errors"
+    "alerts alerts alerts alerts"
     "fleet fleet logs logs"
     "fleet fleet audit readiness";
   gap: 14px;
@@ -742,6 +744,10 @@ a {
 
 .logs-panel {
   grid-area: logs;
+}
+
+.alerts-panel {
+  grid-area: alerts;
 }
 
 .audit-panel {
@@ -1238,6 +1244,10 @@ td {
   color: #79bdff;
 }
 
+.alert-toolbar {
+  grid-template-columns: minmax(160px, 0.35fr) minmax(180px, 0.65fr) auto;
+}
+
 .log-state {
   margin-bottom: 10px;
   border: 1px solid #334050;
@@ -1310,6 +1320,115 @@ td {
   background: #121b26;
   color: #9aa4b2;
   padding: 2px 7px;
+  font-size: 11px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.alerts-panel {
+  border-color: rgba(241, 199, 91, 0.28);
+  background:
+    radial-gradient(circle at top right, rgba(241, 199, 91, 0.08), transparent 32%),
+    rgba(18, 24, 32, 0.88);
+}
+
+.alert-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.alert-card {
+  display: grid;
+  gap: 10px;
+  border: 1px solid #2d3743;
+  border-left: 4px solid #79bdff;
+  border-radius: 12px;
+  background: #0c1117;
+  padding: 12px;
+}
+
+.alert-card.critical {
+  border-left-color: #ff6b7a;
+}
+
+.alert-card.warning {
+  border-left-color: #f1c75b;
+}
+
+.alert-card-topline {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.alert-card strong,
+.alert-card span,
+.alert-card p {
+  overflow-wrap: anywhere;
+}
+
+.alert-card strong {
+  display: block;
+  color: #ffffff;
+}
+
+.alert-card-topline span:not(.alert-state),
+.alert-card p {
+  display: block;
+  margin: 5px 0 0;
+  color: #b9c8d8;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.alert-state {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  min-height: 26px;
+  border: 1px solid #334050;
+  border-radius: 999px;
+  background: #121b26;
+  color: #79bdff;
+  padding: 0 9px;
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.alert-state.critical {
+  border-color: #6f3340;
+  background: #2a1218;
+  color: #ffb8c1;
+}
+
+.alert-state.warning {
+  border-color: #665229;
+  background: #241f16;
+  color: #f4d57a;
+}
+
+.alert-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.alert-meta span,
+.alert-meta time {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  max-width: 100%;
+  overflow: hidden;
+  border: 1px solid #2b3540;
+  border-radius: 999px;
+  background: #121b26;
+  color: #9aa4b2;
+  padding: 0 7px;
   font-size: 11px;
   font-weight: 800;
   text-overflow: ellipsis;
@@ -1465,6 +1584,7 @@ td {
       "telemetry telemetry"
       "cpu memory"
       "requests errors"
+      "alerts alerts"
       "fleet fleet"
       "logs logs"
       "audit readiness";
@@ -1518,6 +1638,7 @@ td {
   .dashboard-grid,
   .deploy-number-row,
   .log-toolbar,
+  .alert-list,
   .stack-grid,
   .hero-mini-grid {
     grid-template-columns: 1fr;
@@ -1533,6 +1654,7 @@ td {
       "memory"
       "requests"
       "errors"
+      "alerts"
       "readiness"
       "fleet"
       "logs"

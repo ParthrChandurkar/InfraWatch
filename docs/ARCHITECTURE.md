@@ -221,23 +221,22 @@ FastAPI queries Loki with:
 Kubernetes metrics
   -> Prometheus rules
   -> Alertmanager
-  -> webhook receiver
+  -> FastAPI /alerts
+  -> React alerts panel
 ```
 
 Important alerts:
 
 - `PodCrashLooping`
 - `HighCpuUsage`
+- `HighMemoryUsage`
+- `BackendUnavailable`
 - `ServiceDown`
 - `DeploymentUnavailable`
 
-For local demos, run:
-
-```bash
-python scripts/alert_receiver.py
-```
-
-Then configure Alertmanager to reach `http://host.docker.internal:9999/alerts` or port-forward as needed.
+The React dashboard does not hardcode alert cards. FastAPI queries the configured
+Alertmanager API, normalizes active alerts, and returns an explicit availability
+error if Alertmanager is unreachable in real local mode.
 
 ## Autoscaling flow
 

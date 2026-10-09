@@ -126,6 +126,12 @@ variable "loki_url" {
   default     = "http://infrawatch-loki-gateway"
 }
 
+variable "alertmanager_url" {
+  description = "Alertmanager URL reachable from inside the InfraWatch namespace."
+  type        = string
+  default     = "http://infrawatch-alertmanager:9093"
+}
+
 variable "redis_url" {
   description = "Redis URL reachable from the backend for short-lived Prometheus response caching."
   type        = string

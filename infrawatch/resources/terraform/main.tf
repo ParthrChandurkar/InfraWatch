@@ -195,6 +195,7 @@ resource "kubernetes_config_map_v1" "backend_config" {
     INFRAWATCH_ALLOW_MOCK_OBSERVABILITY      = tostring(var.allow_mock_observability)
     INFRAWATCH_PROMETHEUS_URL                = var.prometheus_url
     INFRAWATCH_LOKI_URL                      = var.loki_url
+    INFRAWATCH_ALERTMANAGER_URL              = var.alertmanager_url
     REDIS_URL                                = var.redis_url
     REDIS_CACHE_TTL                          = tostring(var.redis_cache_ttl)
     INFRAWATCH_SERVICE_NAME                  = "infrawatch-backend"

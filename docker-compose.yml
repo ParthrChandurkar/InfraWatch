@@ -9,6 +9,7 @@ services:
       INFRAWATCH_EXECUTE_KUBECTL: "false"
       INFRAWATCH_PROMETHEUS_URL: http://prometheus:9090
       INFRAWATCH_LOKI_URL: http://loki:3100
+      INFRAWATCH_ALERTMANAGER_URL: http://alertmanager:9093
       INFRAWATCH_ALLOW_MOCK_OBSERVABILITY: ${INFRAWATCH_ALLOW_MOCK_OBSERVABILITY:-true}
       INFRAWATCH_SERVICE_NAME: infrawatch-backend
       INFRAWATCH_STATE_FILE: /data/deployments.json
@@ -24,6 +25,8 @@ services:
       postgres:
         condition: service_healthy
       prometheus:
+        condition: service_started
+      alertmanager:
         condition: service_started
       loki:
         condition: service_started

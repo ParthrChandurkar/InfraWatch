@@ -9,7 +9,7 @@ InfraWatch is a local-first deployment and observability project for running a s
 - Docker Compose development stack
 - Minikube-oriented Kubernetes manifests and Kustomize configuration
 - Terraform configuration for the Kubernetes foundation
-- Helm scripts for Prometheus, Grafana, and Alertmanager
+- Helm/scripts for Prometheus, Grafana, Loki, Grafana Alloy, and Alertmanager
 - PostgreSQL persistence and Redis caching
 - Failure-demonstration manifests for common Kubernetes workload states
 - GitHub Actions checks for code, tests, builds, images, and optional deployment
@@ -31,7 +31,7 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for component boundaries and 
 | Containers | Docker, Docker Compose |
 | Orchestration | Kubernetes, Minikube, Kustomize, Helm |
 | Infrastructure | Terraform |
-| Observability | Prometheus, Grafana, Alertmanager |
+| Observability | Prometheus, Grafana, Loki, Grafana Alloy, Alertmanager |
 | Automation | GitHub Actions |
 
 ## Local Docker Stack
