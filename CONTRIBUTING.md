@@ -28,6 +28,8 @@ infrawatch --help
 infrawatch doctor
 ```
 
+`infrawatch doctor` can show Kubernetes or Minikube warnings when Docker is healthy but the local cluster is stopped or the Kubernetes API is unreachable.
+
 For Docker Compose development:
 
 ```powershell
@@ -42,6 +44,8 @@ infrawatch start
 infrawatch status
 infrawatch stop
 ```
+
+`infrawatch status` requires a reachable Kubernetes API because it reads live workload state from the configured cluster.
 
 ## Validation commands
 
@@ -97,6 +101,8 @@ Python package build:
 python -m pip install build
 python -m build
 ```
+
+Before InfraWatch is published to PyPI, package testing requires a repository checkout so contributors can build and install the local wheel from `dist/`. Prefer selecting `dist/infrawatch-*-py3-none-any.whl` instead of hardcoding a versioned filename in new docs or scripts.
 
 Whitespace check:
 

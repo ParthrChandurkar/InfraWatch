@@ -84,20 +84,21 @@ infrawatch --version
 infrawatch doctor
 ```
 
-To test the installable package without relying on the repository checkout:
+To test the installable package without relying on the repository checkout, first clone or download this repository, then build a local wheel. This is the current pre-PyPI workflow; InfraWatch is not published to PyPI yet.
 
 ```powershell
+python -m pip install build
 python -m build
 python -m venv C:\Temp\infrawatch-wheel-test
-C:\Temp\infrawatch-wheel-test\Scripts\python.exe -m pip install .\dist\infrawatch-0.3.0-py3-none-any.whl
+C:\Temp\infrawatch-wheel-test\Scripts\python.exe -m pip install (Get-ChildItem .\dist\infrawatch-*-py3-none-any.whl | Select-Object -Last 1).FullName
 Set-Location C:\Temp
 infrawatch --version
 infrawatch doctor
 ```
 
-The locally built wheel contains the runtime Terraform and Kubernetes resources used by the CLI. This is the local package workflow; InfraWatch is not published to PyPI yet.
+The current package version is `0.3.0`, so the built wheel is expected to look like `dist/infrawatch-0.3.0-py3-none-any.whl`. The wildcard command above keeps the install step understandable when the version changes. The locally built wheel contains the runtime Terraform and Kubernetes resources used by the CLI.
 
-`infrawatch doctor` checks local readiness: Python, Docker, Docker Compose, kubectl, Minikube, Terraform, Kustomize rendering, Kubernetes context, and the InfraWatch namespace when a cluster is reachable.
+`infrawatch doctor` checks local readiness: Python, Docker, Docker Compose, kubectl, Minikube, Terraform, Kustomize rendering, Kubernetes context, and the InfraWatch namespace when a cluster is reachable. It can still report Kubernetes or Minikube warnings when Docker is available but the cluster is stopped or the Kubernetes API is unreachable.
 
 Start the local Kubernetes stack:
 
@@ -121,7 +122,7 @@ After InfraWatch is deployed to Kubernetes, check the running components:
 infrawatch status
 ```
 
-`infrawatch status` is different from `doctor`: it checks the current runtime state of the InfraWatch namespace and components such as backend, frontend, PostgreSQL, Redis, Prometheus, Grafana, Loki, and Alertmanager.
+`infrawatch status` is different from `doctor`: it checks the current runtime state of the InfraWatch namespace and components such as backend, frontend, PostgreSQL, Redis, Prometheus, Grafana, Loki, and Alertmanager. It requires a reachable Kubernetes API to report workload state accurately.
 
 To stop the Kubernetes app stack without destroying the Minikube cluster or Terraform foundation:
 

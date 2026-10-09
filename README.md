@@ -59,17 +59,20 @@ infrawatch start
 infrawatch status
 ```
 
-For standalone local testing before a PyPI release, build and install the wheel:
+For standalone local testing before a PyPI release, clone or download this repository, install the build tool, then build and install the local wheel:
 
 ```powershell
+python -m pip install build
 python -m build
 python -m venv .venv-package-test
-.\.venv-package-test\Scripts\python.exe -m pip install .\dist\infrawatch-0.3.0-py3-none-any.whl
+.\.venv-package-test\Scripts\python.exe -m pip install (Get-ChildItem .\dist\infrawatch-*-py3-none-any.whl | Select-Object -Last 1).FullName
 ```
 
-The wheel includes the Terraform and Kubernetes runtime resources needed by the CLI, so `infrawatch doctor`, `infrawatch start`, and `infrawatch status` no longer require running from the Git repository. InfraWatch is not published to PyPI yet.
+The current package version is `0.3.0`, so the built wheel is expected to look like `dist/infrawatch-0.3.0-py3-none-any.whl`. The wildcard command above keeps the install step usable when the version changes. InfraWatch is not published to PyPI yet.
 
-Use `infrawatch doctor` to check whether your machine has the local tools and repository configuration needed to run InfraWatch. Use `infrawatch status` to inspect the current Kubernetes runtime state of InfraWatch components.
+The wheel includes the Terraform and Kubernetes runtime resources needed by the CLI, so `infrawatch doctor`, `infrawatch start`, and `infrawatch status` no longer require running from the Git repository.
+
+Use `infrawatch doctor` to check whether your machine has the local tools and repository configuration needed to run InfraWatch. It can report Kubernetes or Minikube warnings even when Docker is healthy if the cluster is stopped or unreachable. Use `infrawatch status` to inspect the current Kubernetes runtime state of InfraWatch components; it needs a reachable Kubernetes API to report workload state accurately.
 
 `infrawatch start` is the primary local Kubernetes startup path. It starts/reconciles Minikube, applies the Terraform foundation, applies the existing Kustomize manifests, waits for core workloads, and checks status. Observability installation remains explicit; on Windows you can add `--install-observability` to run the existing observability installer without starting long-running port-forward processes.
 
