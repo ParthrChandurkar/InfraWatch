@@ -10,7 +10,7 @@ Security reports are currently accepted for the `main` branch and the latest com
 
 Please do not publish exploitable details publicly before maintainers have had a chance to review the issue.
 
-If GitHub private vulnerability reporting is enabled for this repository, use that channel. If it is not enabled, open a public issue with a minimal, non-exploitable summary and ask the maintainers to establish a private coordination channel. Do not include secrets, kubeconfig contents, tokens, passwords, private logs, or exploit payloads in a public issue.
+Use GitHub private vulnerability reporting for security vulnerabilities in this repository. If that channel is unavailable, open a public issue only to ask maintainers to establish a private coordination path; do not include exploitable details, secrets, kubeconfig contents, tokens, passwords, private logs, or exploit payloads in a public issue.
 
 ## Useful report details
 

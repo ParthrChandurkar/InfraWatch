@@ -38,9 +38,15 @@ Examples of representing the community include using an official project email a
 
 ## Enforcement
 
-The maintainers should establish a private enforcement contact channel before public launch. Until that channel exists, avoid posting sensitive personal details publicly; open a minimal issue asking maintainers to configure a private reporting path.
+Instances of abusive, harassing, or otherwise unacceptable behavior may be reported privately to the project maintainers.
 
-All complaints will be reviewed and investigated promptly and fairly when an appropriate private channel is available.
+For private reporting, use the repository's available private contact channel. For security vulnerabilities, use GitHub's private vulnerability reporting feature.
+
+Please do not post sensitive personal information or details of private complaints in public issues or pull requests.
+
+Community leaders will review and investigate complaints fairly and, where possible, confidentially. They will communicate appropriate outcomes to the people involved while respecting privacy.
+
+Note: non-security private Code of Conduct reporting arrangements still need maintainer configuration.
 
 ## Attribution
 
